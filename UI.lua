@@ -133,18 +133,13 @@ local CreateSignal = Sealz.import(SignalPath , SignalName);
 
 -- Cleanup: tear down any existing Sealz UI before building a fresh one,
 -- so re-executing the script does not stack duplicate interfaces.
-function Sealz:Cleanup()
+do
 	local existing = CoreGui:FindFirstChild("sealz");
 
 	if existing then
 		existing:Destroy();
 	end;
-
-	Sealz.Flags = {};
-	Sealz.ColorRegisitry = {};
 end;
-
-Sealz:Cleanup();
 
 local SealzUI = Instance.new("ScreenGui")
 
@@ -4609,4 +4604,3 @@ Sealz.ColorMode = {
 };
 
 return Sealz;
-print("UI Version is: 0.2b")
