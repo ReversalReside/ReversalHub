@@ -134,10 +134,30 @@ local CreateSignal = Sealz.import(SignalPath , SignalName);
 -- Cleanup: tear down any existing Sealz UI before building a fresh one,
 -- so re-executing the script does not stack duplicate interfaces.
 do
-	local existing = CoreGui:FindFirstChild("sealz");
+	-- Remember the last built UI in a persistent global so we always hold a
+	-- direct reference, regardless of where ProtectGui moved it.
+	local prev = (_G.__SealzUI)
+	if typeof(prev) == "Instance" and prev.Parent then
+		prev:Destroy();
+	end;
 
-	if existing then
-		existing:Destroy();
+	-- Fallback: search every container the GUI could have been parented into.
+	local parents = { CoreGui };
+	if typeof(gethui) == "function" then
+		local ok, hui = pcall(gethui);
+		if ok and hui then parents[#parents + 1] = hui; end;
+	end;
+	local ok, cg = pcall(game.GetService, game, "CoreGui");
+	if ok and cg then parents[#parents + 1] = cg; end;
+	if LocalPlayer:FindFirstChild("PlayerGui") then
+		parents[#parents + 1] = LocalPlayer.PlayerGui;
+	end;
+
+	for i = 1, #parents do
+		local existing = parents[i]:FindFirstChild("sealz");
+		if existing then
+			existing:Destroy();
+		end;
 	end;
 end;
 
@@ -150,6 +170,10 @@ SealzUI.ZIndexBehavior = Enum.ZIndexBehavior.Global;
 SealzUI.IgnoreGuiInset = true;
 
 ProtectGui(SealzUI);
+
+-- Keep a persistent reference so the next execution can destroy this UI
+-- directly, no matter where ProtectGui ended up parenting it.
+_G.__SealzUI = SealzUI;
 
 Sealz.BlurringHandle = CurrentCamera;
 Sealz.ScreenGui = SealzUI;
@@ -4604,3 +4628,4 @@ Sealz.ColorMode = {
 };
 
 return Sealz;
+print("UI Version: v0.2b")
