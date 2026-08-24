@@ -4628,4 +4628,4 @@ Sealz.ColorMode = {
 };
 
 return Sealz;
-print("UI Version: v0.2b")
+print("UI Version: v0.1b")
