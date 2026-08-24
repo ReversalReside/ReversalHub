@@ -131,6 +131,21 @@ local ProtectGui = protect_gui or protectgui or (syn and syn.protect_gui) or fun
 local CurrentCamera: Camera = Sealz.cloneref(workspace.CurrentCamera);
 local CreateSignal = Sealz.import(SignalPath , SignalName);
 
+-- Cleanup: tear down any existing Sealz UI before building a fresh one,
+-- so re-executing the script does not stack duplicate interfaces.
+function Sealz:Cleanup()
+	local existing = CoreGui:FindFirstChild("sealz");
+
+	if existing then
+		existing:Destroy();
+	end;
+
+	Sealz.Flags = {};
+	Sealz.ColorRegisitry = {};
+end;
+
+Sealz:Cleanup();
+
 local SealzUI = Instance.new("ScreenGui")
 
 SealzUI.Name = "sealz";
@@ -4594,3 +4609,4 @@ Sealz.ColorMode = {
 };
 
 return Sealz;
+print("UI Version is: 0.2b")
