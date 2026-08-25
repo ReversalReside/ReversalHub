@@ -106,15 +106,51 @@ Sealz.get_service = function(name: string): ServiceProvider
 end;
 
 Sealz.import = function(url: string , module: string)
-	local a,b = pcall(function()
+	local result = nil;
+	local success, err = pcall(function()
 		if string.sub(url,1,3) ~= "htt" then
-			return loadstring(url)();	
-		end;
-
-		return loadstring(game:HttpGet(url))();
+			if url and #url > 0 then
+				result = loadstring(url)();
+			end;
+		else
+			local content = game:HttpGet(url);
+			if content and #content > 0 then
+				result = loadstring(content)();
+			end;
+		end
 	end)
 
-	return (a and b) or require(script:FindFirstChild(module));
+	if success and result ~= nil then
+		return result;
+	end
+
+	-- Fallback: try to find module in script children
+	local moduleInstance = script:FindFirstChild(module);
+	if moduleInstance then
+		return require(moduleInstance);
+	end
+
+	-- Last resort: return a basic Signal implementation
+	warn("[Sealz.UI] Failed to load Signal library from \""..tostring(url).."\", using fallback.");
+	return {
+		new = function()
+			local s = { _connections = {} };
+			function s:Connect(cb)
+				table.insert(s._connections, cb);
+				return { Disconnect = function() 
+					for i,v in ipairs(s._connections) do 
+						if v == cb then table.remove(s._connections, i); break; end 
+					end 
+				end };
+			end;
+			function s:Fire(...)
+				for _,v in ipairs(s._connections) do
+					pcall(v, ...);
+				end
+			end;
+			return s;
+		end
+	};
 end;
 
 local Players: Players = Sealz.get_service("Players");
