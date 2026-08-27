@@ -1780,13 +1780,13 @@ function Sealz:CreateAbout(Core)
 	Panel.BackgroundColor3 = C_BG
 	Panel.BorderSizePixel = 0
 	Panel.AutomaticSize = Enum.AutomaticSize.Y
-	Panel.Size = UDim2.new(1, -16, 0, 0)
+	Panel.Size = UDim2.new(1, -14, 0, 0)
 	Panel.ZIndex = IndexLayer
 	Panel.LayoutOrder = -999
 	Panel.Parent = Root
 
 	TransManager:Add(Panel)
-	PCorner.CornerRadius = UDim.new(0, 5)
+	PCorner.CornerRadius = UDim.new(0, 4)
 	PCorner.Parent = Panel
 
 	PStroke.Color = C_BORDER
@@ -1798,19 +1798,19 @@ function Sealz:CreateAbout(Core)
 	Title.Parent = Panel
 	Title.BackgroundTransparency = 1
 	Title.BorderSizePixel = 0
-	Title.Size = UDim2.new(1, 0, 0, 18)
+	Title.Size = UDim2.new(1, 0, 0, 15)
 	Title.ZIndex = IndexLayer + 1
 	Title.Font = Sealz.Font
 	Title.Text = "О скрипте"
 	Title.TextColor3 = C_VALUE
-	Title.TextSize = 13
+	Title.TextSize = 11
 	Title.TextXAlignment = Enum.TextXAlignment.Center
 	Title.TextYAlignment = Enum.TextYAlignment.Center
 	TransManager:Add(Title)
 
 	PLayout.Parent = Panel
 	PLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	PLayout.Padding = UDim.new(0, 4)
+	PLayout.Padding = UDim.new(0, 3)
 	PLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	PLayout.FillDirection = Enum.FillDirection.Vertical
 
@@ -1828,7 +1828,7 @@ function Sealz:CreateAbout(Core)
 		Row.Name = "Row"
 		Row.BackgroundTransparency = 1
 		Row.BorderSizePixel = 0
-		Row.Size = UDim2.new(1, 0, 0, 22)
+		Row.Size = UDim2.new(1, 0, 0, 19)
 		Row.ZIndex = IndexLayer + 1
 		Row.LayoutOrder = i
 		Row.Parent = Panel
@@ -1843,7 +1843,7 @@ function Sealz:CreateAbout(Core)
 		L.Text = label
 		L.TextColor3 = C_VALUE
 		L.TextTransparency = 0.5
-		L.TextSize = 12
+		L.TextSize = 10
 		L.TextXAlignment = Enum.TextXAlignment.Left
 		L.TextYAlignment = Enum.TextYAlignment.Center
 		TransManager:Add(L)
@@ -1858,7 +1858,7 @@ function Sealz:CreateAbout(Core)
 		V.Font = Sealz.Font
 		V.Text = value
 		V.TextColor3 = color or C_VALUE
-		V.TextSize = 12
+		V.TextSize = 10
 		V.TextXAlignment = Enum.TextXAlignment.Right
 		V.TextYAlignment = Enum.TextYAlignment.Center
 		TransManager:Add(V)
@@ -1882,17 +1882,17 @@ function Sealz:CreateAbout(Core)
 	Social.BackgroundTransparency = 1
 	Social.BorderSizePixel = 0
 	Social.AutomaticSize = Enum.AutomaticSize.Y
-	Social.Size = UDim2.new(1, 0, 0, 0)
+	Social.Size = UDim2.new(1, -2, 0, 0)
 	Social.ZIndex = IndexLayer + 1
 	Social.LayoutOrder = #rows + 2
 	Social.Parent = Panel
 
 	local SLayout = Instance.new("UIListLayout")
 	SLayout.Parent = Social
-	SLayout.FillDirection = Enum.FillDirection.Vertical
+	SLayout.FillDirection = Enum.FillDirection.Horizontal
 	SLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	SLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	SLayout.Padding = UDim.new(0, 4)
+	SLayout.Padding = UDim.new(0, 1)
 
 	local makeBtn = function(name, link)
 		local Btn = Instance.new("TextButton")
@@ -1900,16 +1900,16 @@ function Sealz:CreateAbout(Core)
 		Btn.BackgroundColor3 = C_BTN
 		Btn.BackgroundTransparency = 0.5
 		Btn.BorderSizePixel = 0
-		Btn.Size = UDim2.new(1, 0, 0, 22)
+		Btn.Size = UDim2.new(0.5, -0.5, 0, 19)
 		Btn.ZIndex = IndexLayer + 2
 		Btn.Font = Sealz.Font
 		Btn.Text = name
 		Btn.TextColor3 = C_VALUE
-		Btn.TextSize = 11
+		Btn.TextSize = 10
 		Btn.Parent = Social
 
 		local BC = Instance.new("UICorner")
-		BC.CornerRadius = UDim.new(0, 5)
+		BC.CornerRadius = UDim.new(0, 4)
 		BC.Parent = Btn
 
 		TransManager:Add(Btn)
