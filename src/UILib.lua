@@ -4726,5 +4726,6 @@ Sealz.ColorMode = {
 	return Sealz;
 end;
 
-SealzTry("UILib.lua", __SealzMain);
-print("UI Version: v0.1bp21")
+local __okLib, __SealzLib = SealzTry("UILib.lua", __SealzMain);
+print("UI Version: v0.1bp25");
+return __SealzLib;
