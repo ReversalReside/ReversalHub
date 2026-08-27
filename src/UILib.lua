@@ -203,6 +203,22 @@ end);
 
 local CreateSignal = okSignal and sig or nil;
 
+-- Track every signal we create so a re-execution tears down the previous
+-- run's connections (otherwise stale TabSignal/BlockSignal callbacks keep
+-- firing against already-destroyed instances and spam the console).
+if typeof(CreateSignal) == "function" then
+	local RealCreateSignal = CreateSignal;
+	CreateSignal = function(...)
+		local sig = RealCreateSignal(...);
+		Sealz:Track(function()
+			if typeof(sig) == "table" and typeof(sig.Destroy) == "function" then
+				sig:Destroy();
+			end;
+		end);
+		return sig;
+	end;
+end;
+
 -- Cleanup: tear down any existing Sealz UI before building a fresh one,
 -- so re-executing the script does not stack duplicate interfaces.
 do
@@ -212,7 +228,14 @@ do
 	local oldConns = _G.__SealzConnections;
 	if typeof(oldConns) == "table" then
 		for i = 1, #oldConns do
-			local ok, err = pcall(oldConns[i]);
+			local ok, err = pcall(function()
+				local conn = oldConns[i];
+				if typeof(conn) == "function" then
+					conn();
+				elseif typeof(conn) == "table" and typeof(conn.Disconnect) == "function" then
+					conn:Disconnect();
+				end;
+			end);
 			if not ok then
 				SealzReportError("UILib.lua (cleanup)", err);
 			end;
@@ -3806,17 +3829,19 @@ function Sealz.new(config)
 		end;
 
 		TabSignal:Connect(function(bool)
-			if bool then
-				TabFrame.Visible = true;
-				TabFrame.Parent = ContainerTabFrame
-			else
-				task.delay(0.45,function()
-					if not TabSignal:Get() then
-						TabFrame.Visible = false;
-						TabFrame.Parent = nil
-					end
-				end)
-			end
+			pcall(function()
+				if bool then
+					TabFrame.Visible = true;
+					TabFrame.Parent = ContainerTabFrame
+				else
+					task.delay(0.45,function()
+						if not TabSignal:Get() then
+							TabFrame.Visible = false;
+							TabFrame.Parent = nil
+						end
+					end)
+				end
+			end)
 		end);
 
 		UIListLayout.Parent = TabFrame
@@ -4727,5 +4752,5 @@ Sealz.ColorMode = {
 end;
 
 local __okLib, __SealzLib = SealzTry("UILib.lua", __SealzMain);
-print("UI Version: v0.1bp25");
+print("UI Version: v0.1bp26");
 return __SealzLib;
