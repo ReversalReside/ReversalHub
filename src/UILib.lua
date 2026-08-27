@@ -34,7 +34,7 @@ local DefaultConfig = {
 	},
 	SignalLibrary = {
 		Type = "Url",
-		Data = "https://raw.githubusercontent.com/4lpaca-pin/Sealz/refs/heads/main/source/signal.luau",
+		Data = "https://raw.githubusercontent.com/ReversalReside/ReversalHub/refs/heads/testingofcleanup-fix-2918/src/signal.luau",
 		Name = "Signal.luau",
 	},
 	Fonts = {
@@ -87,7 +87,7 @@ if LibraryConfig.SignalLibrary then
 		SignalPath = readfile(cfg.Data);
 	end;
 else
-	SignalPath = "https://raw.githubusercontent.com/4lpaca-pin/Sealz/refs/heads/main/source/signal.luau";
+	SignalPath = "https://raw.githubusercontent.com/ReversalReside/ReversalHub/refs/heads/testingofcleanup-fix-2918/src/signal.luau";
 	SignalName = "Signal.luau";
 end
 
