@@ -1717,6 +1717,189 @@ function Sealz:CreateBlockWindow(Core)
 	return Regisiter;
 end;
 
+-- About panel (script info). Styled to match the Sealz UI.
+-- Usage: Sealz:CreateAbout({ Root = settingsFrame, Version = "...", Author = "...",
+--          Status = "Работает", Updated = "27.08.2026", Discord = "invite", GitHub = "url" })
+-- Returns AboutSelf with .Root (the panel) so the caller can set LayoutOrder / position.
+function Sealz:CreateAbout(Core)
+	Core = Sealz:Format(Core, {
+		Version = "?",
+		Author = "?",
+		Status = "Работает",
+		Updated = "?",
+		Discord = "",
+		GitHub = "",
+	});
+
+	local Root: Frame = Core.Root or Sealz.ScreenGui;
+	local IndexLayer = (Root and Root.ZIndex) or 10;
+
+	local AboutSelf = {};
+	local TransManager = Sealz.Transparent();
+
+	local Panel = Instance.new("Frame")
+	local UICorner = Instance.new("UICorner")
+	local UIStroke = Instance.new("UIStroke")
+	local Title = Instance.new("TextLabel")
+
+	Panel.Name = "AboutPanel"
+	Panel.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+	Panel.BackgroundTransparency = 0.15
+	Panel.BorderColor3 = Color3.fromRGB(0, 0, 0)
+	Panel.BorderSizePixel = 0
+	Panel.AutomaticSize = Enum.AutomaticSize.Y
+	Panel.Size = UDim2.new(1, -20, 0, 0)
+	Panel.ZIndex = IndexLayer
+	Panel.Parent = Root
+
+	TransManager:Add(Panel)
+	UICorner.CornerRadius = UDim.new(0, 6)
+	UICorner.Parent = Panel
+
+	UIStroke.Color = Color3.fromRGB(34, 34, 34)
+	UIStroke.Parent = Panel
+	TransManager:Add(UIStroke)
+
+	Title.Name = "Title"
+	Title.Parent = Panel
+	Title.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	Title.BackgroundTransparency = 1
+	Title.BorderSizePixel = 0
+	Title.Position = UDim2.new(0, 10, 0, 8)
+	Title.Size = UDim2.new(1, -20, 0, 18)
+	Title.ZIndex = IndexLayer + 1
+	Title.Font = Sealz.Font
+	Title.Text = "О скрипте"
+	Title.TextColor3 = Sealz.AccentColor
+	Title.TextSize = 13
+	Title.TextXAlignment = Enum.TextXAlignment.Left
+	TransManager:Add(Title)
+
+	local UIListLayout = Instance.new("UIListLayout")
+	UIListLayout.Parent = Panel
+	UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	UIListLayout.Padding = UDim.new(0, 4)
+	UIListLayout.FillDirection = Enum.FillDirection.Vertical
+
+	local rows = {
+		{ "Версия:", Core.Version, nil },
+		{ "Автор:", Core.Author, nil },
+		{ "Статус:", Core.Status, Color3.fromRGB(46, 204, 113) },
+		{ "Обновлено:", Core.Updated, nil },
+	};
+
+	for i, v in next, rows do
+		local label, value, color = v[1], v[2], v[3]
+
+		local Row = Instance.new("Frame")
+		Row.Name = "Row"
+		Row.BackgroundTransparency = 1
+		Row.BorderSizePixel = 0
+		Row.AutomaticSize = Enum.AutomaticSize.Y
+		Row.Size = UDim2.new(1, 0, 0, 22)
+		Row.ZIndex = IndexLayer + 1
+		Row.LayoutOrder = i
+		Row.Parent = Panel
+
+		local L = Instance.new("TextLabel")
+		L.Parent = Row
+		L.BackgroundTransparency = 1
+		L.BorderSizePixel = 0
+		L.Position = UDim2.new(0, 10, 0, 0)
+		L.Size = UDim2.new(0.4, -10, 1, 0)
+		L.AutomaticSize = Enum.AutomaticSize.Y
+		L.ZIndex = IndexLayer + 2
+		L.Font = Sealz.SecondFont
+		L.Text = label
+		L.TextColor3 = Color3.fromRGB(140, 140, 160)
+		L.TextSize = 11
+		L.TextXAlignment = Enum.TextXAlignment.Left
+		TransManager:Add(L)
+
+		local V = Instance.new("TextLabel")
+		V.Parent = Row
+		V.BackgroundTransparency = 1
+		V.BorderSizePixel = 0
+		V.Position = UDim2.new(0.4, 0, 0, 0)
+		V.Size = UDim2.new(0.6, -10, 1, 0)
+		V.AutomaticSize = Enum.AutomaticSize.Y
+		V.ZIndex = IndexLayer + 2
+		V.Font = Sealz.Font
+		V.Text = value
+		V.TextColor3 = color or Color3.fromRGB(240, 240, 248)
+		V.TextSize = 11
+		V.TextXAlignment = Enum.TextXAlignment.Right
+		TransManager:Add(V)
+	end
+
+	local Social = Instance.new("Frame")
+	Social.Name = "Social"
+	Social.BackgroundTransparency = 1
+	Social.BorderSizePixel = 0
+	Social.AutomaticSize = Enum.AutomaticSize.Y
+	Social.Size = UDim2.new(1, 0, 0, 30)
+	Social.ZIndex = IndexLayer + 1
+	Social.LayoutOrder = #rows + 1
+	Social.Parent = Panel
+
+	local SLayout = Instance.new("UIListLayout")
+	SLayout.Parent = Social
+	SLayout.FillDirection = Enum.FillDirection.Horizontal
+	SLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	SLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	SLayout.Padding = UDim.new(0, 10)
+
+	local makeBtn = function(name, link)
+		local Btn = Instance.new("TextButton")
+		Btn.Name = name
+		Btn.BackgroundColor3 = Sealz.AccentColor
+		Btn.BackgroundTransparency = 0.5
+		Btn.BorderSizePixel = 0
+		Btn.AutomaticSize = Enum.AutomaticSize.XY
+		Btn.Size = UDim2.new(0, 0, 0, 26)
+		Btn.ZIndex = IndexLayer + 2
+		Btn.Font = Sealz.Font
+		Btn.Text = name
+		Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		Btn.TextSize = 11
+		Btn.Parent = Social
+
+		local BC = Instance.new("UICorner")
+		BC.CornerRadius = UDim.new(0, 5)
+		BC.Parent = Btn
+
+		TransManager:Add(Btn)
+		Sealz:AddHoverSignal(Btn, "BackgroundTransparency", 0.25, 0.5)
+
+		Btn.Activated:Connect(function()
+			if link and link ~= "" then
+				pcall(function()
+					if setclipboard then setclipboard(link) end
+				end)
+
+				local orig = Btn.Text
+				Btn.Text = "Скопировано!"
+
+				task.delay(1, function()
+					if Btn and Btn.Parent then
+						Btn.Text = orig
+					end
+				end)
+			end
+		end)
+
+		return Btn
+	end
+
+	makeBtn("Discord", Core.Discord)
+	makeBtn("GitHub", Core.GitHub)
+
+	AboutSelf.Root = Panel
+	AboutSelf.TransManager = TransManager
+
+	return AboutSelf
+end;
+
 -- Element & Inputs
 function Sealz:CreateInputs(UI: Frame , Signal)
 	local IndexLayer = UI.ZIndex;
