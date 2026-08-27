@@ -1735,13 +1735,19 @@ function Sealz:CreateAbout(Core)
 	if typeof(Parent) == "table" then
 		-- Accept a Sealz object (e.g. a tool returned by Window:AddTool) and
 		-- resolve it to the actual GUI frame it renders into.
-		Parent = Parent.Root or Parent.Content or Parent.Frame or Parent
+		Parent = Parent.Content or Parent.Root or Parent.Frame or Parent
 	end
 	if typeof(Parent) ~= "Instance" then
 		Parent = Sealz.ScreenGui
 	end
 	local Root: Frame = Parent
-	local IndexLayer = (Root and Root.ZIndex) or 10;
+	local IndexLayer = 10
+	if typeof(Root) == "Instance" then
+		local ok, z = pcall(function() return Root.ZIndex end)
+		if ok and typeof(z) == "number" then
+			IndexLayer = z
+		end
+	end
 
 	local AboutSelf = {};
 	local TransManager = Sealz.Transparent();
@@ -4321,6 +4327,7 @@ function Sealz.new(config)
 		Sealz:SET_CONNECT(winSelf.Signal , toolSelf.Signal);
 
 		local Items = Sealz:Regisiter(ScrollingFrame,toolSelf.Signal)
+		Items.Content = ScrollingFrame;
 
 		Items.Root = toolSelf;
 
