@@ -21,8 +21,11 @@ local function SealzTry(scriptName, func, ...)
 	local n = select("#", ...);
 	local args = { ... };
 	local ok, res = xpcall(func, function(e)
-		local tb = debug.traceback(tostring(e), 2);
-		print(("=== [Sealz] ERROR in script \"%s\" ===\n%s"):format(scriptName, tb));
+		local msg = ("=== [Sealz] ERROR in script \"%s\" ===\n%s"):format(scriptName, tostring(e));
+		if typeof(debug) == "table" and typeof(debug.traceback) == "function" then
+			msg = msg .. "\n" .. debug.traceback(tostring(e), 2);
+		end;
+		print(msg);
 		return e;
 	end, table.unpack(args, 1, n));
 	return ok, res;
@@ -140,11 +143,16 @@ end;
 Sealz.import = function(url: string , module: string)
 	local scriptName = module or "import";
 
-	if string.sub(url,1,3) ~= "htt" then
-		local ok, res = SealzTry(scriptName, function()
-			return loadstring(url)();
-		end);
+	local function loadAndRun(src)
+		local chunk = loadstring(src);
+		if typeof(chunk) ~= "function" then
+			error(("\"%s\" failed to compile (empty or invalid source)"):format(scriptName));
+		end;
+		return chunk();
+	end;
 
+	if string.sub(url,1,3) ~= "htt" then
+		local ok, res = SealzTry(scriptName, loadAndRun, url);
 		if ok then
 			return res;
 		end;
@@ -152,10 +160,7 @@ Sealz.import = function(url: string , module: string)
 		return require(script:FindFirstChild(module));
 	end;
 
-	local ok, res = SealzTry(scriptName, function()
-		return loadstring(game:HttpGet(url))();
-	end);
-
+	local ok, res = SealzTry(scriptName, loadAndRun, game:HttpGet(url));
 	if ok then
 		return res;
 	end;
