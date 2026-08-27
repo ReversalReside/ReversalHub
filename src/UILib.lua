@@ -1752,15 +1752,23 @@ function Sealz:CreateAbout(Core)
 	local AboutSelf = {};
 	local TransManager = Sealz.Transparent();
 
-	-- Palette matching the reference HTML design (uiaboutscriptexample.html)
-	local C_BG        = Color3.fromRGB(17, 17, 24)    -- #111118
-	local C_BORDER    = Color3.fromRGB(42, 42, 58)    -- #2a2a3a
-	local C_DIVIDER   = Color3.fromRGB(26, 26, 36)    -- #1a1a24
-	local C_LABEL     = Color3.fromRGB(106, 106, 128) -- #6a6a80
-	local C_VALUE     = Color3.fromRGB(240, 240, 248) -- #f0f0f8
-	local C_GREEN     = Color3.fromRGB(46, 204, 113)  -- #2ecc71
-	local C_BTN       = Color3.fromRGB(26, 26, 36)    -- #1a1a24
-	local C_BTN_HOVER = Color3.fromRGB(42, 42, 58)    -- #2a2a3a
+	-- Native Sealz palette, minimal
+	local C_BG      = Color3.fromRGB(24, 24, 24)
+	local C_BORDER  = Color3.fromRGB(34, 34, 34)
+	local C_DIVIDER = Color3.fromRGB(34, 34, 34)
+	local C_VALUE   = Color3.fromRGB(255, 255, 255)
+	local C_GREEN   = Color3.fromRGB(46, 204, 113)
+	local C_BTN     = Sealz.AccentColor
+
+	-- 2px lower than the top border of the settings list
+	local Spacer = Instance.new("Frame")
+	Spacer.Name = "AboutSpacer"
+	Spacer.BackgroundTransparency = 1
+	Spacer.BorderSizePixel = 0
+	Spacer.Size = UDim2.new(1, 0, 0, 2)
+	Spacer.ZIndex = IndexLayer
+	Spacer.LayoutOrder = -1000
+	Spacer.Parent = Root
 
 	local Panel = Instance.new("Frame")
 	local PCorner = Instance.new("UICorner")
@@ -1772,12 +1780,13 @@ function Sealz:CreateAbout(Core)
 	Panel.BackgroundColor3 = C_BG
 	Panel.BorderSizePixel = 0
 	Panel.AutomaticSize = Enum.AutomaticSize.Y
-	Panel.Size = UDim2.new(1, -24, 0, 0)
+	Panel.Size = UDim2.new(1, -16, 0, 0)
 	Panel.ZIndex = IndexLayer
+	Panel.LayoutOrder = -999
 	Panel.Parent = Root
 
 	TransManager:Add(Panel)
-	PCorner.CornerRadius = UDim.new(0, 8)
+	PCorner.CornerRadius = UDim.new(0, 5)
 	PCorner.Parent = Panel
 
 	PStroke.Color = C_BORDER
@@ -1789,19 +1798,19 @@ function Sealz:CreateAbout(Core)
 	Title.Parent = Panel
 	Title.BackgroundTransparency = 1
 	Title.BorderSizePixel = 0
-	Title.Size = UDim2.new(1, 0, 0, 22)
+	Title.Size = UDim2.new(1, 0, 0, 18)
 	Title.ZIndex = IndexLayer + 1
 	Title.Font = Sealz.Font
 	Title.Text = "О скрипте"
 	Title.TextColor3 = C_VALUE
-	Title.TextSize = 14
+	Title.TextSize = 13
 	Title.TextXAlignment = Enum.TextXAlignment.Center
 	Title.TextYAlignment = Enum.TextYAlignment.Center
 	TransManager:Add(Title)
 
 	PLayout.Parent = Panel
 	PLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	PLayout.Padding = UDim.new(0, 12)
+	PLayout.Padding = UDim.new(0, 4)
 	PLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	PLayout.FillDirection = Enum.FillDirection.Vertical
 
@@ -1819,7 +1828,7 @@ function Sealz:CreateAbout(Core)
 		Row.Name = "Row"
 		Row.BackgroundTransparency = 1
 		Row.BorderSizePixel = 0
-		Row.Size = UDim2.new(1, 0, 0, 30)
+		Row.Size = UDim2.new(1, 0, 0, 22)
 		Row.ZIndex = IndexLayer + 1
 		Row.LayoutOrder = i
 		Row.Parent = Panel
@@ -1832,7 +1841,8 @@ function Sealz:CreateAbout(Core)
 		L.ZIndex = IndexLayer + 2
 		L.Font = Sealz.SecondFont
 		L.Text = label
-		L.TextColor3 = C_LABEL
+		L.TextColor3 = C_VALUE
+		L.TextTransparency = 0.5
 		L.TextSize = 12
 		L.TextXAlignment = Enum.TextXAlignment.Left
 		L.TextYAlignment = Enum.TextYAlignment.Center
@@ -1874,47 +1884,36 @@ function Sealz:CreateAbout(Core)
 	Social.AutomaticSize = Enum.AutomaticSize.Y
 	Social.Size = UDim2.new(1, 0, 0, 0)
 	Social.ZIndex = IndexLayer + 1
-	Social.LayoutOrder = #rows + 1
+	Social.LayoutOrder = #rows + 2
 	Social.Parent = Panel
 
 	local SLayout = Instance.new("UIListLayout")
 	SLayout.Parent = Social
-	SLayout.FillDirection = Enum.FillDirection.Horizontal
+	SLayout.FillDirection = Enum.FillDirection.Vertical
 	SLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	SLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	SLayout.Padding = UDim.new(0, 10)
+	SLayout.Padding = UDim.new(0, 4)
 
 	local makeBtn = function(name, link)
 		local Btn = Instance.new("TextButton")
 		Btn.Name = name
 		Btn.BackgroundColor3 = C_BTN
+		Btn.BackgroundTransparency = 0.5
 		Btn.BorderSizePixel = 0
-		Btn.AutomaticSize = Enum.AutomaticSize.XY
-		Btn.Size = UDim2.new(0, 0, 0, 28)
+		Btn.Size = UDim2.new(1, 0, 0, 22)
 		Btn.ZIndex = IndexLayer + 2
 		Btn.Font = Sealz.Font
 		Btn.Text = name
 		Btn.TextColor3 = C_VALUE
-		Btn.TextSize = 12
+		Btn.TextSize = 11
 		Btn.Parent = Social
 
 		local BC = Instance.new("UICorner")
-		BC.CornerRadius = UDim.new(0, 6)
+		BC.CornerRadius = UDim.new(0, 5)
 		BC.Parent = Btn
 
-		local BS = Instance.new("UIStroke")
-		BS.Color = C_BORDER
-		BS.Thickness = 1
-		BS.Parent = Btn
-		TransManager:Add(BS)
-
-		local Pad = Instance.new("UIPadding")
-		Pad.PaddingLeft = UDim.new(0, 10)
-		Pad.PaddingRight = UDim.new(0, 10)
-		Pad.Parent = Btn
-
 		TransManager:Add(Btn)
-		Sealz:AddHoverSignal(Btn, "BackgroundColor3", C_BTN_HOVER, C_BTN)
+		Sealz:AddHoverSignal(Btn, "BackgroundTransparency", 0.25, 0.5)
 
 		Btn.Activated:Connect(function()
 			if link and link ~= "" then
@@ -4981,5 +4980,5 @@ Sealz.ColorMode = {
 end;
 
 local __okLib, __SealzLib = SealzTry("UILib.lua", __SealzMain);
-print("UI Version: v0.1bp26");
+print("UI Version: v0.1bp27");
 return __SealzLib;
