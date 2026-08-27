@@ -1731,7 +1731,16 @@ function Sealz:CreateAbout(Core)
 		GitHub = "",
 	});
 
-	local Root: Frame = Core.Root or Sealz.ScreenGui;
+	local Parent = Core.Root or Sealz.ScreenGui
+	if typeof(Parent) == "table" then
+		-- Accept a Sealz object (e.g. a tool returned by Window:AddTool) and
+		-- resolve it to the actual GUI frame it renders into.
+		Parent = Parent.Root or Parent.Content or Parent.Frame or Parent
+	end
+	if typeof(Parent) ~= "Instance" then
+		Parent = Sealz.ScreenGui
+	end
+	local Root: Frame = Parent
 	local IndexLayer = (Root and Root.ZIndex) or 10;
 
 	local AboutSelf = {};
