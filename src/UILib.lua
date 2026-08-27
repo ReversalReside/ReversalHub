@@ -30,6 +30,8 @@ local function SealzTry(scriptName, func, ...)
 	end, table.unpack(args, 1, n));
 	return ok, res;
 end;
+
+local function __SealzMain()
 local DefaultConfig = {
 	Icons = {
 		Type = "Asset",
@@ -102,7 +104,7 @@ local ScaleTween = TweenInfo.new(0.5,Enum.EasingStyle.Quint);
 
 -- Library
 local Sealz = {
-	Icons = Font.new(IconsPath,Enum.FontWeight.Bold,Enum.FontStyle.Normal),
+	Icons = (Font ~= nil and Font.new or function() end)(IconsPath,Enum.FontWeight.Bold,Enum.FontStyle.Normal),
 	Version = "1.0.1"
 };
 
@@ -140,6 +142,21 @@ Sealz.get_service = function(name: string): ServiceProvider
 	return (n and nm) or game.FindFirstChild(game, name);
 end;
 
+local function HttpGet(url)
+	if typeof(game) == "table" and typeof(game.HttpGet) == "function" then
+		return game:HttpGet(url);
+	elseif typeof(httpget) == "function" then
+		return httpget(url);
+	elseif typeof(request) == "function" then
+		local r = request({ Url = url, Method = "GET" });
+		return (r and (r.Body or r.body)) or "";
+	elseif typeof(syn) == "table" and typeof(syn.request) == "function" then
+		local r = syn.request({ Url = url, Method = "GET" });
+		return (r and (r.Body or r.body)) or "";
+	end;
+	error("no HTTP method available to fetch \"" .. tostring(url) .. "\"");
+end;
+
 Sealz.import = function(url: string , module: string)
 	local scriptName = module or "import";
 
@@ -160,7 +177,7 @@ Sealz.import = function(url: string , module: string)
 		return require(script:FindFirstChild(module));
 	end;
 
-	local ok, res = SealzTry(scriptName, loadAndRun, game:HttpGet(url));
+	local ok, res = SealzTry(scriptName, loadAndRun, HttpGet(url));
 	if ok then
 		return res;
 	end;
@@ -4706,5 +4723,8 @@ Sealz.ColorMode = {
 	White = Color3.fromRGB(255, 255, 255),
 };
 
-return Sealz;
-print("UI Version: v0.1b")
+	return Sealz;
+end;
+
+SealzTry("UILib.lua", __SealzMain);
+print("UI Version: v0.1bp21")
