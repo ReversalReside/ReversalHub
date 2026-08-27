@@ -6,6 +6,27 @@
 ]]
 
 local Args = {...};
+
+-- Error reporting: prints which named script errored, the message, and a
+-- stack trace that includes the line number where the error was thrown.
+local function SealzReportError(scriptName, err)
+	print(("=== [Sealz] ERROR in script \"%s\" ==="):format(scriptName));
+	print(tostring(err));
+	print(debug.traceback("", 3));
+end;
+
+-- Run `func` safely. On error, report the script name + message + line via
+-- print, then return ok + result so the caller can decide what to do.
+local function SealzTry(scriptName, func, ...)
+	local n = select("#", ...);
+	local args = { ... };
+	local ok, res = xpcall(func, function(e)
+		local tb = debug.traceback(tostring(e), 2);
+		print(("=== [Sealz] ERROR in script \"%s\" ===\n%s"):format(scriptName, tb));
+		return e;
+	end, table.unpack(args, 1, n));
+	return ok, res;
+end;
 local DefaultConfig = {
 	Icons = {
 		Type = "Asset",
@@ -35,7 +56,7 @@ if game:GetService('RunService'):IsStudio() and script and script:WaitForChild('
 	local status , func = pcall(require , script:WaitForChild('Environment'));
 
 	if status then
-		func(getfenv());
+		SealzTry("env.luau", func, getfenv());
 	end;
 end;
 
@@ -82,6 +103,17 @@ local Sealz = {
 	Version = "1.0.1"
 };
 
+-- Shared connection registry so a re-execution can tear down everything the
+-- previous run left running (threads, signals, loops) before building fresh.
+_G.__SealzConnections = _G.__SealzConnections or {};
+Sealz._connections = _G.__SealzConnections;
+
+-- Register a teardown function (usually a :Disconnect() / task.cancel wrapper)
+-- that the next cleanup will call when this UI is replaced.
+Sealz.Track = function(teardown)
+	table.insert(Sealz._connections, teardown);
+end;
+
 Sealz.Sizes = {
 	Default = UDim2.new(0, 640, 0, 480),
 	Small = UDim2.new(0, 600,0, 335),
@@ -106,15 +138,29 @@ Sealz.get_service = function(name: string): ServiceProvider
 end;
 
 Sealz.import = function(url: string , module: string)
-	local a,b = pcall(function()
-		if string.sub(url,1,3) ~= "htt" then
-			return loadstring(url)();	
+	local scriptName = module or "import";
+
+	if string.sub(url,1,3) ~= "htt" then
+		local ok, res = SealzTry(scriptName, function()
+			return loadstring(url)();
+		end);
+
+		if ok then
+			return res;
 		end;
 
-		return loadstring(game:HttpGet(url))();
-	end)
+		return require(script:FindFirstChild(module));
+	end;
 
-	return (a and b) or require(script:FindFirstChild(module));
+	local ok, res = SealzTry(scriptName, function()
+		return loadstring(game:HttpGet(url))();
+	end);
+
+	if ok then
+		return res;
+	end;
+
+	return require(script:FindFirstChild(module));
 end;
 
 local Players: Players = Sealz.get_service("Players");
@@ -129,19 +175,43 @@ local TextService: TextService = Sealz.get_service("TextService");
 local CoreGui: PlayerGui = (gethui and gethui()) or Sealz.get_service("CoreGui") or LocalPlayer.PlayerGui;
 local ProtectGui = protect_gui or protectgui or (syn and syn.protect_gui) or function(s) return s; end;
 local CurrentCamera: Camera = Sealz.cloneref(workspace.CurrentCamera);
-local CreateSignal = Sealz.import(SignalPath , SignalName);
+local okSignal, sig = SealzTry(SignalName or "Signal.luau", function()
+	return Sealz.import(SignalPath, SignalName);
+end);
+
+local CreateSignal = okSignal and sig or nil;
 
 -- Cleanup: tear down any existing Sealz UI before building a fresh one,
 -- so re-executing the script does not stack duplicate interfaces.
 do
-	-- Remember the last built UI in a persistent global so we always hold a
-	-- direct reference, regardless of where ProtectGui moved it.
-	local prev = (_G.__SealzUI)
-	if typeof(prev) == "Instance" and prev.Parent then
-		prev:Destroy();
+	-- Disconnect every connection/thread the previous run registered. This
+	-- kills the blur loops, dropdown runtime threads and other long-lived
+	-- signals so they don't keep firing against destroyed instances.
+	local oldConns = _G.__SealzConnections;
+	if typeof(oldConns) == "table" then
+		for i = 1, #oldConns do
+			local ok, err = pcall(oldConns[i]);
+			if not ok then
+				SealzReportError("UILib.lua (cleanup)", err);
+			end;
+		end;
+		table.clear(oldConns);
 	end;
 
-	-- Fallback: search every container the GUI could have been parented into.
+	-- Destroy the previous ScreenGui by direct reference first (works no
+	-- matter where ProtectGui moved it), then as a fallback search every
+	-- container the GUI could have been parented into.
+	local prev = _G.__SealzUI;
+	if typeof(prev) == "Instance" then
+		if prev.Parent then
+			prev:Destroy();
+		else
+			pcall(function()
+				prev:Destroy();
+			end);
+		end;
+	end;
+
 	local parents = { CoreGui };
 	if typeof(gethui) == "function" then
 		local ok, hui = pcall(gethui);
@@ -154,8 +224,8 @@ do
 	end;
 
 	for i = 1, #parents do
-		local existing = parents[i]:FindFirstChild("sealz");
-		if existing then
+		local ok, existing = pcall(parents[i].FindFirstChild, parents[i], "sealz");
+		if ok and existing then
 			existing:Destroy();
 		end;
 	end;
@@ -407,7 +477,7 @@ function Sealz:AddBlurring(Frame , Signal)
 			end);
 
 			if not status then
-				generate_debug_prt();
+				SealzReportError("UILib.lua (AddBlurring)", "failed to parent blur Part to camera");
 			end;
 		else
 			Sealz:Tween(DepthOfField,TweenInfo.new(0.1),{
@@ -470,6 +540,8 @@ function Sealz:AddBlurring(Frame , Signal)
 		Part:Destroy();
 		DepthOfField:Destroy();
 	end;
+
+	Sealz:Track(disconnect);
 
 	Frame.Destroying:Connect(disconnect);
 
@@ -1686,7 +1758,9 @@ function Sealz:CreateInputs(UI: Frame , Signal)
 		end;
 
 
-		ButtonSelf.Activated = Button.Activated:Connect(Config.Callback)
+		ButtonSelf.Activated = Button.Activated:Connect(function(...)
+			SealzTry(Config.Name or "Button", Config.Callback, ...);
+		end)
 		ButtonSelf.Signal = Signal:Connect(function(b)
 			TransManager:Fire(b)	
 		end);
