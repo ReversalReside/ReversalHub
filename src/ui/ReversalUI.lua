@@ -2377,7 +2377,7 @@ function NullUI:CreateWindow(opts)
 
 	local toggleKey = opts.ToggleKeybind
 	if toggleKey == nil then
-		toggleKey = Enum.KeyCode.RightShift
+		toggleKey = Enum.KeyCode.RightControl
 	end
 
 	if toggleKey then
