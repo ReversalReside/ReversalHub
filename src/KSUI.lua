@@ -36,257 +36,6 @@ if getgenv().ArqelLoaded and hui:FindFirstChild("ArqelKeylessSystem") then retur
 getgenv().ArqelLoaded = true
 getgenv().ArqelClosed = false
 
-local RunService = cloneref(game:GetService("RunService"))
-local GuiService = cloneref(game:GetService("GuiService"))
-
-local function SafeClamp(value, lo, hi)
-	if hi < lo then return lo end
-	return math.clamp(value, lo, hi)
-end
-
-local function Tween(instance, props, duration, style, direction)
-	local t = TweenService:Create(
-		instance,
-		TweenInfo.new(
-			math.max(duration or 0.25, 0),
-			style or Enum.EasingStyle.Quint,
-			direction or Enum.EasingDirection.Out
-		),
-		props
-	)
-	t:Play()
-	return t
-end
-
-local function Corner(parent, radius)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, radius or 16)
-	c.Parent = parent
-	return c
-end
-
-local function Stroke(parent, color, thickness, transparency)
-	local s = Instance.new("UIStroke")
-	s.Color = color or Color3.new(1, 1, 1)
-	s.Thickness = thickness or 1
-	s.Transparency = transparency or 0.9
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	s.Parent = parent
-	return s
-end
-
-local ACRYLIC_DOF_NAME = "Arqel_AcrylicDOF"
-local ACRYLIC_DISTANCE = 0.001
-local ACRYLIC_TRANSPARENCY = 0.98
-local AcrylicDOF = nil
-local AcrylicControllers = {}
-local BlurTarget = false
-local VisibleWindows = 0
-local SavedLightingBrightness = nil
-local SunSuppressed = false
-
-local function EnsureAcrylicDOF()
-	if AcrylicDOF and AcrylicDOF.Parent then return AcrylicDOF end
-	local stale = Lighting:FindFirstChild(ACRYLIC_DOF_NAME)
-	if stale then stale:Destroy() end
-	local dof = Instance.new("DepthOfFieldEffect")
-	dof.Name = ACRYLIC_DOF_NAME
-	dof.FarIntensity = 0
-	dof.FocusDistance = 0.05
-	dof.InFocusRadius = 0.1
-	dof.NearIntensity = 1
-	dof.Enabled = false
-	dof.Parent = Lighting
-	AcrylicDOF = dof
-	return dof
-end
-
-local function SetGlassSunSuppressed(enabled)
-	enabled = enabled and true or false
-	if enabled == SunSuppressed then return end
-	SunSuppressed = enabled
-	if enabled then
-		SavedLightingBrightness = Lighting.Brightness
-		Lighting.Brightness = 0
-	elseif SavedLightingBrightness ~= nil then
-		Lighting.Brightness = SavedLightingBrightness
-		SavedLightingBrightness = nil
-	end
-end
-
-local function RefreshAcrylicEffect()
-	local dof = EnsureAcrylicDOF()
-	local active = BlurTarget and #AcrylicControllers > 0
-	dof.Enabled = active
-	SetGlassSunSuppressed(active)
-end
-
-local function IsAcrylicQualityLow()
-	local ok, value = pcall(function()
-		return UserSettings().GameSettings.SavedQualityLevel.Value
-	end)
-	return ok and value > 0 and value < 8
-end
-
-local function CreateWindowAcrylic(guiObject)
-	local folder = Instance.new("Folder")
-	folder.Name = "Arqel_AcrylicWindow"
-
-	local part = Instance.new("Part")
-	part.Name = "Glass"
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanQuery = false
-	part.CanTouch = false
-	part.CastShadow = false
-	part.Locked = true
-	part.Material = Enum.Material.Glass
-	part.Color = Color3.new(0, 0, 0)
-	part.Reflectance = 0
-	part.Size = Vector3.new(1, 1, 0.001)
-	part.Transparency = 1
-	part.Parent = folder
-
-	local mesh = Instance.new("SpecialMesh")
-	mesh.Name = "AcrylicMesh"
-	mesh.MeshType = Enum.MeshType.Brick
-	mesh.Offset = Vector3.new(0, 0, -0.000001)
-	mesh.Scale = Vector3.new(1, 1, 0.001)
-	mesh.Parent = part
-
-	local fallback = Instance.new("Frame")
-	fallback.Name = "AcrylicFallback"
-	fallback.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
-	fallback.BackgroundTransparency = 0.88
-	fallback.BorderSizePixel = 0
-	fallback.Size = UDim2.fromScale(1, 1)
-	fallback.ZIndex = 0
-	fallback.Visible = false
-	fallback.Parent = guiObject
-
-	local fallbackCorner = Instance.new("UICorner")
-	fallbackCorner.CornerRadius = UDim.new(0, 16)
-	fallbackCorner.Parent = fallback
-
-	local fallbackGradient = Instance.new("UIGradient")
-	fallbackGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 30, 30)),
-		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(18, 18, 18)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 12)),
-	})
-	fallbackGradient.Rotation = 118
-	fallbackGradient.Parent = fallback
-
-	local controller = {
-		Gui = guiObject,
-		Folder = folder,
-		Part = part,
-		Mesh = mesh,
-		Fallback = fallback,
-		Alpha = 0,
-		Destroyed = false,
-	}
-	table.insert(AcrylicControllers, controller)
-	RefreshAcrylicEffect()
-
-	function controller:Destroy()
-		if self.Destroyed then return end
-		self.Destroyed = true
-		local index = table.find(AcrylicControllers, self)
-		if index then table.remove(AcrylicControllers, index) end
-		if self.Folder then self.Folder:Destroy() end
-		if self.Fallback then self.Fallback:Destroy() end
-		RefreshAcrylicEffect()
-	end
-
-	return controller
-end
-
-RunService.RenderStepped:Connect(function(deltaTime)
-	local camera = workspace.CurrentCamera
-	local dof = AcrylicDOF
-	if not camera or not dof then return end
-
-	for index = #AcrylicControllers, 1, -1 do
-		local acrylic = AcrylicControllers[index]
-		local gui = acrylic.Gui
-		if acrylic.Destroyed or not gui or not gui.Parent then
-			if not acrylic.Destroyed then acrylic:Destroy() end
-			continue
-		end
-
-		if acrylic.Folder.Parent ~= camera then
-			acrylic.Folder.Parent = camera
-		end
-
-		local size = gui.AbsoluteSize
-		local visible = BlurTarget and gui.Visible and size.X > 2 and size.Y > 2
-		local lowQuality = IsAcrylicQualityLow()
-		if acrylic.Fallback and acrylic.Fallback.Parent then
-			acrylic.Fallback.Visible = visible
-			acrylic.Fallback.BackgroundTransparency = lowQuality and 0.88 or 0.94
-		end
-		local targetAlpha = visible and 1 or 0
-		acrylic.Alpha = acrylic.Alpha + (targetAlpha - acrylic.Alpha)
-			* math.clamp(deltaTime * (targetAlpha > acrylic.Alpha and 9 or 12), 0, 1)
-		acrylic.Part.Transparency = 1 - ((1 - ACRYLIC_TRANSPARENCY) * acrylic.Alpha)
-
-		if acrylic.Alpha > 0.001 then
-			local edgeInset = math.clamp(camera.ViewportSize.Y * 0.012, 8, 18)
-			local position = gui.AbsolutePosition + Vector2.new(edgeInset, edgeInset)
-			local blurSize = Vector2.new(
-				math.max(1, size.X - edgeInset * 2),
-				math.max(1, size.Y - edgeInset * 2)
-			)
-
-			local topLeft3D = camera:ScreenPointToRay(
-				position.X, position.Y, ACRYLIC_DISTANCE
-			).Origin
-			local topRight3D = camera:ScreenPointToRay(
-				position.X + blurSize.X, position.Y, ACRYLIC_DISTANCE
-			).Origin
-			local bottomRight3D = camera:ScreenPointToRay(
-				position.X + blurSize.X, position.Y + blurSize.Y, ACRYLIC_DISTANCE
-			).Origin
-			local width = (topRight3D - topLeft3D).Magnitude
-			local height = (bottomRight3D - topRight3D).Magnitude
-
-			acrylic.Part.CFrame = CFrame.fromMatrix(
-				(topLeft3D + bottomRight3D) / 2,
-				camera.CFrame.XVector,
-				camera.CFrame.YVector,
-				camera.CFrame.ZVector
-			)
-			acrylic.Mesh.Scale = Vector3.new(width, height, 0.001)
-		end
-	end
-end)
-
-local function SetBlur(enabled)
-	BlurTarget = enabled and true or false
-	RefreshAcrylicEffect()
-end
-
-local function UpdateBlur()
-	SetBlur(Arqel.Options.Blur and VisibleWindows > 0)
-end
-
-local function LoadFonts()
-	local ok, fonts = pcall(function()
-		return {
-			Regular  = Font.new("rbxasset://fonts/families/Figtree.json", Enum.FontWeight.Regular,  Enum.FontStyle.Normal),
-			SemiBold = Font.new("rbxasset://fonts/families/Figtree.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
-		}
-	end)
-	if ok and fonts and fonts.Regular and fonts.SemiBold then return fonts end
-	return {
-		Regular  = Font.fromEnum(Enum.Font.Gotham),
-		SemiBold = Font.fromEnum(Enum.Font.GothamSemibold),
-	}
-end
-
-local Fonts = LoadFonts()
-
 local Arqel = {}
 
 --appearance
@@ -321,20 +70,20 @@ Arqel.Options = {
 
 --theme
 Arqel.Theme = {
-    Accent = Color3.fromRGB(255, 255, 255),
-    AccentHover = Color3.fromRGB(220, 220, 220),
-    Background = Color3.fromRGB(16, 16, 16),
+    Accent = Color3.fromRGB(139, 0, 0),
+    AccentHover = Color3.fromRGB(170, 20, 20),
+    Background = Color3.fromRGB(15, 15, 15),
     Header = Color3.fromRGB(20, 20, 20),
     Input = Color3.fromRGB(25, 25, 25),
-    Text = Color3.fromRGB(240, 240, 240),
-    TextDim = Color3.fromRGB(150, 150, 155),
-    Success = Color3.fromRGB(110, 220, 140),
-    Error = Color3.fromRGB(255, 105, 105),
-    Warning = Color3.fromRGB(255, 190, 90),
-    StatusIdle = Color3.fromRGB(150, 150, 155),
+    Text = Color3.fromRGB(255, 255, 255),
+    TextDim = Color3.fromRGB(120, 120, 120),
+    Success = Color3.fromRGB(50, 205, 110),
+    Error = Color3.fromRGB(245, 70, 90),
+    Warning = Color3.fromRGB(255, 180, 50),
+    StatusIdle = Color3.fromRGB(180, 80, 80),
     Discord = Color3.fromRGB(88, 101, 242),
     DiscordHover = Color3.fromRGB(114, 137, 218),
-    Divider = Color3.fromRGB(45, 45, 45),
+    Divider = Color3.fromRGB(45, 45, 70),
     Pending = Color3.fromRGB(60, 60, 60)
 }
 
@@ -587,13 +336,29 @@ end
 
 local function enableBlur()
     if not Arqel.Options.Blur then return end
-    VisibleWindows = VisibleWindows + 1
-    UpdateBlur()
+    local existing = Lighting:FindFirstChild("ArqelKeySystemBlur")
+    if existing then existing:Destroy() end
+    Internal.BlurEffect = Instance.new("BlurEffect")
+    Internal.BlurEffect.Name = "ArqelKeySystemBlur"
+    Internal.BlurEffect.Size = 0
+    Internal.BlurEffect.Parent = Lighting
+    TweenService:Create(Internal.BlurEffect, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Size = 24}):Play()
 end
 
 local function disableBlur()
-    VisibleWindows = math.max(0, VisibleWindows - 1)
-    UpdateBlur()
+    if Internal.BlurEffect and Internal.BlurEffect.Parent then
+        TweenService:Create(Internal.BlurEffect, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = 0}):Play()
+        task.delay(0.3, function()
+            if Internal.BlurEffect and Internal.BlurEffect.Parent then
+                Internal.BlurEffect:Destroy()
+                Internal.BlurEffect = nil
+            end
+        end)
+    else
+        local existing = Lighting:FindFirstChild("ArqelKeySystemBlur")
+        if existing then existing:Destroy() end
+        Internal.BlurEffect = nil
+    end
 end
 
 local function fullCleanup()
@@ -660,7 +425,7 @@ local function CreateDoorOverlay(parentFrame, width, height)
     leftDoor.Name = "LeftDoor"
     leftDoor.Size = UDim2.new(0.5, 0, 1, 0)
     leftDoor.Position = UDim2.new(0, 0, 0, 0)
-    leftDoor.BackgroundColor3 = Arqel.Theme.Background
+    leftDoor.BackgroundColor3 = Arqel.Theme.Header
     leftDoor.BorderSizePixel = 0
     leftDoor.ZIndex = 51
     leftDoor.Parent = overlay
@@ -669,7 +434,7 @@ local function CreateDoorOverlay(parentFrame, width, height)
     rightDoor.Name = "RightDoor"
     rightDoor.Size = UDim2.new(0.5, 0, 1, 0)
     rightDoor.Position = UDim2.new(0.5, 0, 0, 0)
-    rightDoor.BackgroundColor3 = Arqel.Theme.Background
+    rightDoor.BackgroundColor3 = Arqel.Theme.Header
     rightDoor.BorderSizePixel = 0
     rightDoor.ZIndex = 51
     rightDoor.Parent = overlay
@@ -719,6 +484,13 @@ local function ShowLoadingScreen(onComplete)
     local completed = false
     local oldGui = hui:FindFirstChild("ArqelLoadingScreen")
     if oldGui then oldGui:Destroy() end
+    local oldBlur = Lighting:FindFirstChild("ArqelLoadingBlur")
+    if oldBlur then oldBlur:Destroy() end
+
+    local blurEffect = Instance.new("BlurEffect")
+    blurEffect.Name = "ArqelLoadingBlur"
+    blurEffect.Size = 0
+    blurEffect.Parent = Lighting
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "ArqelLoadingScreen"
@@ -837,7 +609,7 @@ local function ShowLoadingScreen(onComplete)
         indicator.Text = "○"
         indicator.TextColor3 = Arqel.Theme.Pending
         indicator.TextSize = phaseTextSize
-        indicator.FontFace = Fonts.SemiBold
+        indicator.Font = Enum.Font.ArimoBold
         indicator.TextTransparency = 1
         indicator.Parent = row
 
@@ -848,7 +620,7 @@ local function ShowLoadingScreen(onComplete)
         label.Text = name
         label.TextColor3 = Arqel.Theme.Pending
         label.TextSize = phaseTextSize
-        label.FontFace = Fonts.SemiBold
+        label.Font = Enum.Font.ArimoBold
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.TextTransparency = 1
         label.Parent = row
@@ -903,7 +675,7 @@ local function ShowLoadingScreen(onComplete)
             elseif i == num then
                 p.indicator.Text = "●"
                 p.indicator.TextTransparency = 0
-                TweenService:Create(p.indicator, TweenInfo.new(0.2), {TextColor3 = Arqel.Theme.Text}):Play()
+                TweenService:Create(p.indicator, TweenInfo.new(0.2), {TextColor3 = Arqel.Theme.Accent}):Play()
                 TweenService:Create(p.label, TweenInfo.new(0.2), {TextColor3 = Arqel.Theme.Text}):Play()
                 currentPhase = num
                 pulseThread = task.spawn(function()
@@ -924,6 +696,7 @@ local function ShowLoadingScreen(onComplete)
     end
 
     task.spawn(function()
+        TweenService:Create(blurEffect, TweenInfo.new(0.6), {Size = 24}):Play()
         TweenService:Create(loadingScreen, TweenInfo.new(0.5), {BackgroundTransparency = 0.25}):Play()
         task.wait(0.3)
         TweenService:Create(shipBody, TweenInfo.new(0.4, Enum.EasingStyle.Back), {BackgroundTransparency = 0}):Play()
@@ -960,8 +733,10 @@ local function ShowLoadingScreen(onComplete)
             TweenService:Create(phases[i].indicator, TweenInfo.new(0.25), {TextTransparency = 1}):Play()
             TweenService:Create(phases[i].label, TweenInfo.new(0.25), {TextTransparency = 1}):Play()
         end
+        TweenService:Create(blurEffect, TweenInfo.new(0.3), {Size = 0}):Play()
         task.wait(0.5)
         gui:Destroy()
+        blurEffect:Destroy()
         if onComplete then onComplete() end
         completed = true
     end)
@@ -994,16 +769,15 @@ function Arqel:Notify(title, message, duration, iconType)
     frame.Size = UDim2.new(0, width, 0, height)
     frame.Position = UDim2.new(1, width + 20, 1, -15)
     frame.AnchorPoint = Vector2.new(1, 1)
-    frame.BackgroundColor3 = Arqel.Theme.Background
-    frame.BackgroundTransparency = 0.15
+    frame.BackgroundColor3 = Arqel.Theme.Header
     frame.BorderSizePixel = 0
     frame.Parent = notifGui
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
 
     local stroke = Instance.new("UIStroke", frame)
-    stroke.Color = Color3.new(1, 1, 1)
+    stroke.Color = Arqel.Theme.Accent
     stroke.Thickness = 1
-    stroke.Transparency = 0.82
+    stroke.Transparency = 0.7
 
     local progressBg = Instance.new("Frame")
     progressBg.Size = UDim2.new(1, 0, 0, 2)
@@ -1014,7 +788,7 @@ function Arqel:Notify(title, message, duration, iconType)
 
     local progressBar = Instance.new("Frame")
     progressBar.Size = UDim2.new(1, 0, 1, 0)
-    progressBar.BackgroundColor3 = Arqel.Theme.Text
+    progressBar.BackgroundColor3 = Arqel.Theme.Accent
     progressBar.BorderSizePixel = 0
     progressBar.Parent = progressBg
 
@@ -1029,8 +803,8 @@ function Arqel:Notify(title, message, duration, iconType)
 
     local iconMap = {
         success = {"check", Arqel.Theme.Success}, error = {"alert", Arqel.Theme.Error},
-        warning = {"alert", Arqel.Theme.Warning}, shield = {"shield", Arqel.Theme.Text},
-        info = {"shield", Arqel.Theme.Text}, key = {"key", Arqel.Theme.Text},
+        warning = {"alert", Arqel.Theme.Warning}, shield = {"shield", Arqel.Theme.Accent},
+        info = {"shield", Arqel.Theme.Accent}, key = {"key", Arqel.Theme.Accent},
         copy = {"copy", Arqel.Theme.Success}, discord = {"discord", Arqel.Theme.Discord},
         close = {"close", Arqel.Theme.Error}, nogetkey = {"nogetkey", Arqel.Theme.TextDim}
     }
@@ -1048,7 +822,7 @@ function Arqel:Notify(title, message, duration, iconType)
     titleLabel.Size = UDim2.new(1, -(textX + 14), 0, 24)
     titleLabel.Position = UDim2.new(0, textX, 0, 12)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.FontFace = Fonts.SemiBold
+    titleLabel.Font = Enum.Font.ArimoBold
     titleLabel.TextSize = math.clamp(15 * scale, 13, 18)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextColor3 = Arqel.Theme.Text
@@ -1060,7 +834,7 @@ function Arqel:Notify(title, message, duration, iconType)
     messageLabel.Size = UDim2.new(1, -(textX + 14), 0, 22)
     messageLabel.Position = UDim2.new(0, textX, 0, 38)
     messageLabel.BackgroundTransparency = 1
-    messageLabel.FontFace = Fonts.Regular
+    messageLabel.Font = Enum.Font.ArimoBold
     messageLabel.TextSize = math.clamp(13 * scale, 11, 15)
     messageLabel.TextXAlignment = Enum.TextXAlignment.Left
     messageLabel.TextColor3 = Arqel.Theme.TextDim
@@ -1116,28 +890,35 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
     panel.Size = UDim2.new(0, 0, 0, panelHeight)
     panel.Position = UDim2.new(1, gap, 0, 0)
     panel.BackgroundColor3 = Arqel.Theme.Background
-    panel.BackgroundTransparency = 0.15
     panel.BorderSizePixel = 0
     panel.ClipsDescendants = true
     panel.Parent = mainFrame
-    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 16)
+    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 4)
 
     local panelStroke = Instance.new("UIStroke", panel)
-    panelStroke.Color = Color3.new(1, 1, 1)
-    panelStroke.Thickness = 1
+    panelStroke.Color = Arqel.Theme.Accent
+    panelStroke.Thickness = 2
     panelStroke.Transparency = 1
 
     local panelHeader = Instance.new("Frame")
     panelHeader.Size = UDim2.new(1, 0, 0, 50)
-    panelHeader.BackgroundTransparency = 1
+    panelHeader.BackgroundColor3 = Arqel.Theme.Header
     panelHeader.BorderSizePixel = 0
     panelHeader.Parent = panel
+    Instance.new("UICorner", panelHeader).CornerRadius = UDim.new(0, 4)
+
+    local panelHeaderFix = Instance.new("Frame")
+    panelHeaderFix.Size = UDim2.new(1, 0, 0, 8)
+    panelHeaderFix.Position = UDim2.new(0, 0, 1, -8)
+    panelHeaderFix.BackgroundColor3 = Arqel.Theme.Header
+    panelHeaderFix.BorderSizePixel = 0
+    panelHeaderFix.Parent = panelHeader
 
     local panelHeaderLine = Instance.new("Frame")
     panelHeaderLine.Size = UDim2.new(1, 0, 0, 1)
     panelHeaderLine.Position = UDim2.new(0, 0, 1, 0)
-    panelHeaderLine.BackgroundColor3 = Color3.new(1, 1, 1)
-    panelHeaderLine.BackgroundTransparency = 0.92
+    panelHeaderLine.BackgroundColor3 = Arqel.Theme.Accent
+    panelHeaderLine.BackgroundTransparency = 0.6
     panelHeaderLine.BorderSizePixel = 0
     panelHeaderLine.Parent = panelHeader
 
@@ -1147,7 +928,7 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
     panelHeaderIcon.AnchorPoint = Vector2.new(0, 0.5)
     panelHeaderIcon.BackgroundTransparency = 1
     panelHeaderIcon.Image = getIcon("changelog")
-    panelHeaderIcon.ImageColor3 = Arqel.Theme.Text
+    panelHeaderIcon.ImageColor3 = Arqel.Theme.Accent
     panelHeaderIcon.ScaleType = Enum.ScaleType.Fit
     panelHeaderIcon.Parent = panelHeader
 
@@ -1158,7 +939,7 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
     panelTitle.Text = "Changelog"
     panelTitle.TextColor3 = Arqel.Theme.Text
     panelTitle.TextSize = 16
-    panelTitle.FontFace = Fonts.SemiBold
+    panelTitle.Font = Enum.Font.ArimoBold
     panelTitle.TextXAlignment = Enum.TextXAlignment.Left
     panelTitle.Parent = panelHeader
 
@@ -1179,8 +960,8 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
     scrollFrame.Position = UDim2.new(0, 0, 0, 55)
     scrollFrame.BackgroundTransparency = 1
     scrollFrame.BorderSizePixel = 0
-    scrollFrame.ScrollBarThickness = 0
-    scrollFrame.ScrollBarImageTransparency = 1
+    scrollFrame.ScrollBarThickness = 4
+    scrollFrame.ScrollBarImageColor3 = Arqel.Theme.Accent
     scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
     scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
     scrollFrame.Parent = panel
@@ -1210,9 +991,9 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
         versionLabel.Size = UDim2.new(1, 0, 0, 22)
         versionLabel.BackgroundTransparency = 1
         versionLabel.Text = update.Version .. "  •  " .. update.Date
-        versionLabel.TextColor3 = Arqel.Theme.Text
+        versionLabel.TextColor3 = Arqel.Theme.Accent
         versionLabel.TextSize = 14
-        versionLabel.FontFace = Fonts.SemiBold
+        versionLabel.Font = Enum.Font.ArimoBold
         versionLabel.TextXAlignment = Enum.TextXAlignment.Left
         versionLabel.LayoutOrder = 1
         versionLabel.Parent = entry
@@ -1225,7 +1006,7 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
             changeLabel.Text = "  •  " .. change
             changeLabel.TextColor3 = Arqel.Theme.TextDim
             changeLabel.TextSize = 12
-            changeLabel.FontFace = Fonts.Regular
+            changeLabel.Font = Enum.Font.ArimoBold
             changeLabel.TextXAlignment = Enum.TextXAlignment.Left
             changeLabel.TextWrapped = true
             changeLabel.LayoutOrder = j + 1
@@ -1241,8 +1022,7 @@ local function CreateChangelogPanel(parent, windowWidth, panelHeight, panelWidth
 
             local div = Instance.new("Frame")
             div.Size = UDim2.new(1, 0, 0, 2)
-            div.BackgroundColor3 = Color3.new(1, 1, 1)
-            div.BackgroundTransparency = 0.92
+            div.BackgroundColor3 = Arqel.Theme.Divider
             div.BorderSizePixel = 0
             div.Parent = divWrapper
         end
@@ -1284,28 +1064,35 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     panel.Position = UDim2.new(0, -(gap), 0, 0)
     panel.AnchorPoint = Vector2.new(1, 0)
     panel.BackgroundColor3 = Arqel.Theme.Background
-    panel.BackgroundTransparency = 0.15
     panel.BorderSizePixel = 0
     panel.ClipsDescendants = true
     panel.Parent = mainFrame
-    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 16)
+    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 4)
 
     local panelStroke = Instance.new("UIStroke", panel)
-    panelStroke.Color = Color3.new(1, 1, 1)
-    panelStroke.Thickness = 1
-    panelStroke.Transparency = isOpen and 0.8 or 1
+    panelStroke.Color = Arqel.Theme.Accent
+    panelStroke.Thickness = 2
+    panelStroke.Transparency = isOpen and 0.4 or 1
 
     local panelHeader = Instance.new("Frame")
     panelHeader.Size = UDim2.new(1, 0, 0, 50)
-    panelHeader.BackgroundTransparency = 1
+    panelHeader.BackgroundColor3 = Arqel.Theme.Header
     panelHeader.BorderSizePixel = 0
     panelHeader.Parent = panel
+    Instance.new("UICorner", panelHeader).CornerRadius = UDim.new(0, 4)
+
+    local panelHeaderFix = Instance.new("Frame")
+    panelHeaderFix.Size = UDim2.new(1, 0, 0, 8)
+    panelHeaderFix.Position = UDim2.new(0, 0, 1, -8)
+    panelHeaderFix.BackgroundColor3 = Arqel.Theme.Header
+    panelHeaderFix.BorderSizePixel = 0
+    panelHeaderFix.Parent = panelHeader
 
     local panelHeaderLine = Instance.new("Frame")
     panelHeaderLine.Size = UDim2.new(1, 0, 0, 1)
     panelHeaderLine.Position = UDim2.new(0, 0, 1, 0)
-    panelHeaderLine.BackgroundColor3 = Color3.new(1, 1, 1)
-    panelHeaderLine.BackgroundTransparency = 0.92
+    panelHeaderLine.BackgroundColor3 = Arqel.Theme.Accent
+    panelHeaderLine.BackgroundTransparency = 0.6
     panelHeaderLine.BorderSizePixel = 0
     panelHeaderLine.Parent = panelHeader
 
@@ -1315,7 +1102,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     panelHeaderIcon.AnchorPoint = Vector2.new(0, 0.5)
     panelHeaderIcon.BackgroundTransparency = 1
     panelHeaderIcon.Image = getIcon("user")
-    panelHeaderIcon.ImageColor3 = Arqel.Theme.Text
+    panelHeaderIcon.ImageColor3 = Arqel.Theme.Accent
     panelHeaderIcon.ScaleType = Enum.ScaleType.Fit
     panelHeaderIcon.Parent = panelHeader
 
@@ -1326,7 +1113,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     panelTitle.Text = "User Info"
     panelTitle.TextColor3 = Arqel.Theme.Text
     panelTitle.TextSize = 16
-    panelTitle.FontFace = Fonts.SemiBold
+    panelTitle.Font = Enum.Font.ArimoBold
     panelTitle.TextXAlignment = Enum.TextXAlignment.Left
     panelTitle.Parent = panelHeader
 
@@ -1370,27 +1157,26 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     avatarGlow.Size = UDim2.new(1, 0, 1, 0)
     avatarGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
     avatarGlow.AnchorPoint = Vector2.new(0.5, 0.5)
-    avatarGlow.BackgroundColor3 = Color3.new(1, 1, 1)
-    avatarGlow.BackgroundTransparency = 0.9
+    avatarGlow.BackgroundColor3 = Arqel.Theme.Accent
+    avatarGlow.BackgroundTransparency = 0.5
     avatarGlow.BorderSizePixel = 0
     avatarGlow.Parent = avatarWrapper
-    Instance.new("UICorner", avatarGlow).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", avatarGlow).CornerRadius = UDim.new(0, 4)
 
     local avatarGlowStroke = Instance.new("UIStroke", avatarGlow)
-    avatarGlowStroke.Color = Color3.new(1, 1, 1)
-    avatarGlowStroke.Thickness = 1
-    avatarGlowStroke.Transparency = 0.85
+    avatarGlowStroke.Color = Arqel.Theme.Accent
+    avatarGlowStroke.Thickness = 1.5
+    avatarGlowStroke.Transparency = 0.3
 
     local avatarContainer = Instance.new("Frame")
     avatarContainer.Size = UDim2.new(0, avatarSize, 0, avatarSize)
     avatarContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
     avatarContainer.AnchorPoint = Vector2.new(0.5, 0.5)
     avatarContainer.BackgroundColor3 = Arqel.Theme.Input
-    avatarContainer.BackgroundTransparency = 0.5
     avatarContainer.BorderSizePixel = 0
     avatarContainer.ClipsDescendants = true
     avatarContainer.Parent = avatarWrapper
-    Instance.new("UICorner", avatarContainer).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", avatarContainer).CornerRadius = UDim.new(0, 4)
 
     local avatarImage = Instance.new("ImageLabel")
     avatarImage.Size = UDim2.new(1, 0, 1, 0)
@@ -1410,7 +1196,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     welcomeLabel.Text = "Welcome, " .. (player and player.DisplayName or "User")
     welcomeLabel.TextColor3 = Arqel.Theme.Text
     welcomeLabel.TextSize = welcomeSize
-    welcomeLabel.FontFace = Fonts.SemiBold
+    welcomeLabel.Font = Enum.Font.ArimoBold
     welcomeLabel.TextTruncate = Enum.TextTruncate.AtEnd
     welcomeLabel.LayoutOrder = 2
     welcomeLabel.Parent = contentFrame
@@ -1419,8 +1205,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     divider1.Size = UDim2.new(1, 16, 0, 2)
     divider1.Position = UDim2.new(0.5, 0, 0, 0)
     divider1.AnchorPoint = Vector2.new(0.5, 0)
-    divider1.BackgroundColor3 = Color3.new(1, 1, 1)
-    divider1.BackgroundTransparency = 0.92
+    divider1.BackgroundColor3 = Arqel.Theme.Divider
     divider1.BorderSizePixel = 0
     divider1.LayoutOrder = 3
     divider1.Parent = contentFrame
@@ -1437,7 +1222,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     executorTitle.Text = "Executor"
     executorTitle.TextColor3 = Arqel.Theme.TextDim
     executorTitle.TextSize = titleSize
-    executorTitle.FontFace = Fonts.SemiBold
+    executorTitle.Font = Enum.Font.ArimoBold
     executorTitle.TextXAlignment = Enum.TextXAlignment.Left
     executorTitle.Parent = executorContainer
 
@@ -1446,9 +1231,9 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     executorValue.Position = UDim2.new(0, 0, 0, 11)
     executorValue.BackgroundTransparency = 1
     executorValue.Text = getExecutorName()
-    executorValue.TextColor3 = Arqel.Theme.Text
+    executorValue.TextColor3 = Arqel.Theme.Accent
     executorValue.TextSize = valueSize
-    executorValue.FontFace = Fonts.SemiBold
+    executorValue.Font = Enum.Font.ArimoBold
     executorValue.TextXAlignment = Enum.TextXAlignment.Left
     executorValue.TextTruncate = Enum.TextTruncate.AtEnd
     executorValue.Parent = executorContainer
@@ -1465,7 +1250,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     deviceTitle.Text = "Device"
     deviceTitle.TextColor3 = Arqel.Theme.TextDim
     deviceTitle.TextSize = titleSize
-    deviceTitle.FontFace = Fonts.SemiBold
+    deviceTitle.Font = Enum.Font.ArimoBold
     deviceTitle.TextXAlignment = Enum.TextXAlignment.Left
     deviceTitle.Parent = deviceContainer
 
@@ -1474,9 +1259,9 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     deviceValue.Position = UDim2.new(0, 0, 0, 11)
     deviceValue.BackgroundTransparency = 1
     deviceValue.Text = getDeviceType()
-    deviceValue.TextColor3 = Arqel.Theme.Text
+    deviceValue.TextColor3 = Arqel.Theme.Accent
     deviceValue.TextSize = valueSize
-    deviceValue.FontFace = Fonts.SemiBold
+    deviceValue.Font = Enum.Font.ArimoBold
     deviceValue.TextXAlignment = Enum.TextXAlignment.Left
     deviceValue.TextTruncate = Enum.TextTruncate.AtEnd
     deviceValue.Parent = deviceContainer
@@ -1485,8 +1270,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     divider2.Size = UDim2.new(1, 16, 0, 2)
     divider2.Position = UDim2.new(0.5, 0, 0, 0)
     divider2.AnchorPoint = Vector2.new(0.5, 0)
-    divider2.BackgroundColor3 = Color3.new(1, 1, 1)
-    divider2.BackgroundTransparency = 0.92
+    divider2.BackgroundColor3 = Arqel.Theme.Divider
     divider2.BorderSizePixel = 0
     divider2.LayoutOrder = 6
     divider2.Parent = contentFrame
@@ -1503,7 +1287,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     hwidTitle.Text = "HWID"
     hwidTitle.TextColor3 = Arqel.Theme.TextDim
     hwidTitle.TextSize = titleSize
-    hwidTitle.FontFace = Fonts.SemiBold
+    hwidTitle.Font = Enum.Font.ArimoBold
     hwidTitle.TextXAlignment = Enum.TextXAlignment.Left
     hwidTitle.Parent = hwidContainer
 
@@ -1519,7 +1303,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     hwidValue.Text = hiddenDots
     hwidValue.TextColor3 = Arqel.Theme.TextDim
     hwidValue.TextSize = isCompact and 9 or 10
-    hwidValue.FontFace = Fonts.SemiBold
+    hwidValue.Font = Enum.Font.ArimoBold
     hwidValue.TextXAlignment = Enum.TextXAlignment.Left
     hwidValue.TextTruncate = Enum.TextTruncate.AtEnd
     hwidValue.Parent = hwidContainer
@@ -1533,7 +1317,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     copyBtn.ImageColor3 = Arqel.Theme.TextDim
     copyBtn.ScaleType = Enum.ScaleType.Fit
     copyBtn.Parent = hwidContainer
-    copyBtn.MouseEnter:Connect(function() TweenService:Create(copyBtn, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.Text}):Play() end)
+    copyBtn.MouseEnter:Connect(function() TweenService:Create(copyBtn, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.Accent}):Play() end)
     copyBtn.MouseLeave:Connect(function() TweenService:Create(copyBtn, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.TextDim}):Play() end)
     copyBtn.MouseButton1Click:Connect(function()
         pcall(function() setclipboard(fullHWID) end)
@@ -1546,8 +1330,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     divider3.Size = UDim2.new(1, 16, 0, 2)
     divider3.Position = UDim2.new(0.5, 0, 0, 0)
     divider3.AnchorPoint = Vector2.new(0.5, 0)
-    divider3.BackgroundColor3 = Color3.new(1, 1, 1)
-    divider3.BackgroundTransparency = 0.92
+    divider3.BackgroundColor3 = Arqel.Theme.Divider
     divider3.BorderSizePixel = 0
     divider3.LayoutOrder = 8
     divider3.Parent = contentFrame
@@ -1575,7 +1358,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     clockIcon.Size = UDim2.new(0, isCompact and 14 or 16, 0, isCompact and 14 or 16)
     clockIcon.BackgroundTransparency = 1
     clockIcon.Image = getIcon("clock")
-    clockIcon.ImageColor3 = Arqel.Theme.Text
+    clockIcon.ImageColor3 = Arqel.Theme.Accent
     clockIcon.ScaleType = Enum.ScaleType.Fit
     clockIcon.LayoutOrder = 1
     clockIcon.Parent = clockRow
@@ -1585,9 +1368,9 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     clockTimeLabel.AutomaticSize = Enum.AutomaticSize.X
     clockTimeLabel.BackgroundTransparency = 1
     clockTimeLabel.Text = formatTime12()
-    clockTimeLabel.TextColor3 = Arqel.Theme.Text
+    clockTimeLabel.TextColor3 = Arqel.Theme.Accent
     clockTimeLabel.TextSize = isCompact and 14 or 16
-    clockTimeLabel.FontFace = Fonts.SemiBold
+    clockTimeLabel.Font = Enum.Font.ArimoBold
     clockTimeLabel.LayoutOrder = 2
     clockTimeLabel.Parent = clockRow
 
@@ -1598,7 +1381,7 @@ local function CreateUserInfoPanel(parent, windowWidth, panelHeight, panelWidth,
     clockDateLabel.Text = formatDate()
     clockDateLabel.TextColor3 = Arqel.Theme.TextDim
     clockDateLabel.TextSize = isCompact and 9 or 11
-    clockDateLabel.FontFace = Fonts.SemiBold
+    clockDateLabel.Font = Enum.Font.ArimoBold
     clockDateLabel.TextXAlignment = Enum.TextXAlignment.Center
     clockDateLabel.Parent = clockContainer
 
@@ -1654,17 +1437,15 @@ local function BuildCenteredUI(windowWidth, windowHeight, panelHeight, userPanel
     mainFrame.Size = UDim2.new(0, windowWidth, 0, windowHeight)
     mainFrame.Position = UDim2.new(0.5, 0, 0, 0)
     mainFrame.AnchorPoint = Vector2.new(0.5, 0)
-    mainFrame.BackgroundColor3 = Color3.new(1, 1, 1)
-    mainFrame.BackgroundTransparency = 0.15
+    mainFrame.BackgroundColor3 = Arqel.Theme.Background
     mainFrame.BorderSizePixel = 0
-    mainFrame.ClipsDescendants = true
     mainFrame.Parent = container
-    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
+    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 4)
 
     local mainStroke = Instance.new("UIStroke", mainFrame)
-    mainStroke.Color = Color3.new(1, 1, 1)
-    mainStroke.Thickness = 1
-    mainStroke.Transparency = 0.92
+    mainStroke.Color = Arqel.Theme.Accent
+    mainStroke.Thickness = 2
+    mainStroke.Transparency = 0.4
 
     local userPanel, toggleUserPanel, isUserOpen, userPanelActualWidth = CreateUserInfoPanel(container, windowWidth, panelHeight, userPanelWidth, mainFrame, gap, false)
     local changelogPanel, toggleChangelog, isChangelogOpen, changelogPanelActualWidth = CreateChangelogPanel(container, windowWidth, panelHeight, changelogPanelWidth, mainFrame, gap)
@@ -1739,20 +1520,26 @@ local function BuildKeylessUI()
     local main = ui.mainFrame
     local mainStroke = ui.mainStroke
 
-    CreateWindowAcrylic(main)
-
     local header = Instance.new("Frame")
     header.Size = UDim2.new(1, 0, 0, 50)
-    header.BackgroundTransparency = 1
+    header.BackgroundColor3 = Arqel.Theme.Header
     header.BorderSizePixel = 0
     header.Active = true
     header.Parent = main
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 4)
+
+    local headerFix = Instance.new("Frame")
+    headerFix.Size = UDim2.new(1, 0, 0, 8)
+    headerFix.Position = UDim2.new(0, 0, 1, -8)
+    headerFix.BackgroundColor3 = Arqel.Theme.Header
+    headerFix.BorderSizePixel = 0
+    headerFix.Parent = header
 
     local headerLine = Instance.new("Frame")
     headerLine.Size = UDim2.new(1, 0, 0, 1)
     headerLine.Position = UDim2.new(0, 0, 1, 0)
-    headerLine.BackgroundColor3 = Color3.new(1, 1, 1)
-    headerLine.BackgroundTransparency = 0.92
+    headerLine.BackgroundColor3 = Arqel.Theme.Accent
+    headerLine.BackgroundTransparency = 0.6
     headerLine.BorderSizePixel = 0
     headerLine.Parent = header
 
@@ -1773,7 +1560,7 @@ local function BuildKeylessUI()
     title.Text = Arqel.Appearance.Title
     title.TextColor3 = Arqel.Theme.Text
     title.TextSize = mobile and 24 or 26
-    title.FontFace = Fonts.SemiBold
+    title.Font = Enum.Font.ArimoBold
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = header
 
@@ -1799,12 +1586,12 @@ local function BuildKeylessUI()
     successBox.BackgroundTransparency = 0.85
     successBox.BorderSizePixel = 0
     successBox.Parent = main
-    Instance.new("UICorner", successBox).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", successBox).CornerRadius = UDim.new(0, 4)
 
     local successStroke = Instance.new("UIStroke", successBox)
     successStroke.Color = Arqel.Theme.Success
     successStroke.Thickness = 1
-    successStroke.Transparency = 0.6
+    successStroke.Transparency = 0.5
 
     local checkIcon = Instance.new("ImageLabel")
     checkIcon.Size = UDim2.new(0, 24, 0, 24)
@@ -1823,7 +1610,7 @@ local function BuildKeylessUI()
     successText.Text = "Access Granted"
     successText.TextColor3 = Arqel.Theme.Success
     successText.TextSize = mobile and 17 or 18
-    successText.FontFace = Fonts.SemiBold
+    successText.Font = Enum.Font.ArimoBold
     successText.TextXAlignment = Enum.TextXAlignment.Left
     successText.Parent = successBox
 
@@ -1835,14 +1622,13 @@ local function BuildKeylessUI()
     keylessText.Text = "Keyless Script"
     keylessText.TextColor3 = Arqel.Theme.TextDim
     keylessText.TextSize = mobile and 14 or 15
-    keylessText.FontFace = Fonts.SemiBold
+    keylessText.Font = Enum.Font.ArimoBold
     keylessText.Parent = main
 
     local divider = Instance.new("Frame")
-    divider.Size = UDim2.new(1, 0, 0, 1)
+    divider.Size = UDim2.new(1, 0, 0, 3)
     divider.Position = UDim2.new(0, 0, 0, contentY + 88)
-    divider.BackgroundColor3 = Color3.new(1, 1, 1)
-    divider.BackgroundTransparency = 0.92
+    divider.BackgroundColor3 = Arqel.Theme.Divider
     divider.BorderSizePixel = 0
     divider.Parent = main
 
@@ -1850,18 +1636,17 @@ local function BuildKeylessUI()
     launchBtn.Size = UDim2.new(0.75, 0, 0, 42)
     launchBtn.Position = UDim2.new(0.5, 0, 0, contentY + 103)
     launchBtn.AnchorPoint = Vector2.new(0.5, 0)
-    launchBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-    launchBtn.BackgroundTransparency = 0.82
+    launchBtn.BackgroundColor3 = Arqel.Theme.Accent
     launchBtn.BorderSizePixel = 0
     launchBtn.Text = ""
     launchBtn.AutoButtonColor = false
     launchBtn.Parent = main
-    Instance.new("UICorner", launchBtn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", launchBtn).CornerRadius = UDim.new(0, 4)
 
     local launchStroke = Instance.new("UIStroke", launchBtn)
-    launchStroke.Color = Color3.new(1, 1, 1)
+    launchStroke.Color = Arqel.Theme.AccentHover
     launchStroke.Thickness = 1
-    launchStroke.Transparency = 0.7
+    launchStroke.Transparency = 0.5
 
     local launchContent = Instance.new("Frame")
     launchContent.Size = UDim2.new(1, 0, 1, 0)
@@ -1890,12 +1675,12 @@ local function BuildKeylessUI()
     launchLabel.Text = "Launch Script"
     launchLabel.TextColor3 = Arqel.Theme.Text
     launchLabel.TextSize = mobile and 14 or 15
-    launchLabel.FontFace = Fonts.SemiBold
+    launchLabel.Font = Enum.Font.ArimoBold
     launchLabel.LayoutOrder = 2
     launchLabel.Parent = launchContent
 
-    launchBtn.MouseEnter:Connect(function() TweenService:Create(launchBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.72}):Play() end)
-    launchBtn.MouseLeave:Connect(function() TweenService:Create(launchBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.82}):Play() end)
+    launchBtn.MouseEnter:Connect(function() TweenService:Create(launchBtn, TweenInfo.new(0.15), {BackgroundColor3 = Arqel.Theme.AccentHover}):Play() end)
+    launchBtn.MouseLeave:Connect(function() TweenService:Create(launchBtn, TweenInfo.new(0.15), {BackgroundColor3 = Arqel.Theme.Accent}):Play() end)
 
     local bottomY = contentY + 153
 
@@ -1903,13 +1688,12 @@ local function BuildKeylessUI()
     userBtn.Size = UDim2.new(0, 36, 0, 36)
     userBtn.Position = UDim2.new(0.5, -44, 0, bottomY)
     userBtn.AnchorPoint = Vector2.new(0.5, 0)
-    userBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-    userBtn.BackgroundTransparency = 0.95
+    userBtn.BackgroundColor3 = Arqel.Theme.Background
     userBtn.BorderSizePixel = 0
     userBtn.Text = ""
     userBtn.AutoButtonColor = false
     userBtn.Parent = main
-    Instance.new("UICorner", userBtn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", userBtn).CornerRadius = UDim.new(0, 4)
 
     local userIcon = Instance.new("ImageLabel")
     userIcon.Size = UDim2.new(0, 18, 0, 18)
@@ -1920,20 +1704,19 @@ local function BuildKeylessUI()
     userIcon.ImageColor3 = Arqel.Theme.TextDim
     userIcon.ScaleType = Enum.ScaleType.Fit
     userIcon.Parent = userBtn
-    userBtn.MouseEnter:Connect(function() TweenService:Create(userIcon, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.Text}):Play() end)
+    userBtn.MouseEnter:Connect(function() TweenService:Create(userIcon, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.Accent}):Play() end)
     userBtn.MouseLeave:Connect(function() TweenService:Create(userIcon, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.TextDim}):Play() end)
 
     local discordBtn = Instance.new("TextButton")
     discordBtn.Size = UDim2.new(0, 36, 0, 36)
     discordBtn.Position = UDim2.new(0.5, 0, 0, bottomY)
     discordBtn.AnchorPoint = Vector2.new(0.5, 0)
-    discordBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-    discordBtn.BackgroundTransparency = 0.95
+    discordBtn.BackgroundColor3 = Arqel.Theme.Background
     discordBtn.BorderSizePixel = 0
     discordBtn.Text = ""
     discordBtn.AutoButtonColor = false
     discordBtn.Parent = main
-    Instance.new("UICorner", discordBtn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", discordBtn).CornerRadius = UDim.new(0, 4)
 
     local discordIcon = Instance.new("ImageLabel")
     discordIcon.Size = UDim2.new(0, 18, 0, 18)
@@ -1951,13 +1734,12 @@ local function BuildKeylessUI()
     changelogBtn.Size = UDim2.new(0, 36, 0, 36)
     changelogBtn.Position = UDim2.new(0.5, 44, 0, bottomY)
     changelogBtn.AnchorPoint = Vector2.new(0.5, 0)
-    changelogBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-    changelogBtn.BackgroundTransparency = 0.95
+    changelogBtn.BackgroundColor3 = Arqel.Theme.Background
     changelogBtn.BorderSizePixel = 0
     changelogBtn.Text = ""
     changelogBtn.AutoButtonColor = false
     changelogBtn.Parent = main
-    Instance.new("UICorner", changelogBtn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", changelogBtn).CornerRadius = UDim.new(0, 4)
 
     local changelogIcon = Instance.new("ImageLabel")
     changelogIcon.Size = UDim2.new(0, 18, 0, 18)
@@ -1992,7 +1774,6 @@ local function BuildKeylessUI()
         Arqel:Notify("Goodbye", "See you next time!", 2, "close")
         closeDoorsThenExit(function()
             fullCleanup()
-            disableBlur()
             TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
             TweenService:Create(main, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
             TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
@@ -2071,20 +1852,26 @@ local function BuildKeyUI()
     local mainFrame = ui.mainFrame
     local mainStroke = ui.mainStroke
 
-    CreateWindowAcrylic(mainFrame)
-
     local header = Instance.new("Frame")
     header.Size = UDim2.new(1, 0, 0, 50)
-    header.BackgroundTransparency = 1
+    header.BackgroundColor3 = Arqel.Theme.Header
     header.BorderSizePixel = 0
     header.Active = true
     header.Parent = mainFrame
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 4)
+
+    local headerFix = Instance.new("Frame")
+    headerFix.Size = UDim2.new(1, 0, 0, 6)
+    headerFix.Position = UDim2.new(0, 0, 1, -6)
+    headerFix.BackgroundColor3 = Arqel.Theme.Header
+    headerFix.BorderSizePixel = 0
+    headerFix.Parent = header
 
     local headerLine = Instance.new("Frame")
     headerLine.Size = UDim2.new(1, 0, 0, 1)
     headerLine.Position = UDim2.new(0, 0, 1, 0)
-    headerLine.BackgroundColor3 = Color3.new(1, 1, 1)
-    headerLine.BackgroundTransparency = 0.92
+    headerLine.BackgroundColor3 = Arqel.Theme.Accent
+    headerLine.BackgroundTransparency = 0.6
     headerLine.BorderSizePixel = 0
     headerLine.Parent = header
 
@@ -2105,7 +1892,7 @@ local function BuildKeyUI()
     titleLabel.Text = Arqel.Appearance.Title
     titleLabel.TextColor3 = Arqel.Theme.Text
     titleLabel.TextSize = mobile and 24 or 26
-    titleLabel.FontFace = Fonts.SemiBold
+    titleLabel.Font = Enum.Font.ArimoBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.Parent = header
 
@@ -2127,17 +1914,16 @@ local function BuildKeyUI()
     statusFrame.Size = UDim2.new(0.94, 0, 0, statusHeight)
     statusFrame.Position = UDim2.new(0.5, 0, 0, contentStartY)
     statusFrame.AnchorPoint = Vector2.new(0.5, 0)
-    statusFrame.BackgroundColor3 = Color3.new(1, 1, 1)
-    statusFrame.BackgroundTransparency = 0.93
+    statusFrame.BackgroundColor3 = Arqel.Theme.Input
     statusFrame.BorderSizePixel = 0
     statusFrame.ClipsDescendants = true
     statusFrame.Parent = mainFrame
-    Instance.new("UICorner", statusFrame).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", statusFrame).CornerRadius = UDim.new(0, 4)
 
     local statusStroke = Instance.new("UIStroke", statusFrame)
-    statusStroke.Color = Color3.new(1, 1, 1)
+    statusStroke.Color = Arqel.Theme.Accent
     statusStroke.Thickness = 1
-    statusStroke.Transparency = 0.88
+    statusStroke.Transparency = 0.8
 
     local statusIcon = Instance.new("ImageLabel")
     statusIcon.Size = UDim2.new(0, 24, 0, 24)
@@ -2156,7 +1942,7 @@ local function BuildKeyUI()
     statusLabel.Text = Arqel.Appearance.Subtitle
     statusLabel.TextColor3 = Arqel.Theme.StatusIdle
     statusLabel.TextSize = mobile and 17 or 18
-    statusLabel.FontFace = Fonts.SemiBold
+    statusLabel.Font = Enum.Font.ArimoBold
     statusLabel.TextXAlignment = Enum.TextXAlignment.Left
     statusLabel.TextTruncate = Enum.TextTruncate.AtEnd
     statusLabel.Parent = statusFrame
@@ -2167,17 +1953,16 @@ local function BuildKeyUI()
     inputFrame.Size = UDim2.new(0.94, 0, 0, elementHeight)
     inputFrame.Position = UDim2.new(0.5, 0, 0, inputStartY)
     inputFrame.AnchorPoint = Vector2.new(0.5, 0)
-    inputFrame.BackgroundColor3 = Color3.new(1, 1, 1)
-    inputFrame.BackgroundTransparency = 0.93
+    inputFrame.BackgroundColor3 = Arqel.Theme.Input
     inputFrame.BorderSizePixel = 0
     inputFrame.ClipsDescendants = true
     inputFrame.Parent = mainFrame
-    Instance.new("UICorner", inputFrame).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", inputFrame).CornerRadius = UDim.new(0, 4)
 
     local inputStroke = Instance.new("UIStroke", inputFrame)
-    inputStroke.Color = Color3.new(1, 1, 1)
+    inputStroke.Color = Arqel.Theme.Accent
     inputStroke.Thickness = 1
-    inputStroke.Transparency = 0.88
+    inputStroke.Transparency = 0.7
 
     local textBox = Instance.new("TextBox")
     textBox.Size = UDim2.new(1, -24, 1, 0)
@@ -2189,21 +1974,20 @@ local function BuildKeyUI()
     textBox.PlaceholderText = "Enter your key..."
     textBox.PlaceholderColor3 = Arqel.Theme.TextDim
     textBox.TextSize = mobile and 17 or 18
-    textBox.FontFace = Fonts.SemiBold
+    textBox.Font = Enum.Font.ArimoBold
     textBox.ClearTextOnFocus = false
     textBox.TextTruncate = Enum.TextTruncate.AtEnd
     textBox.TextXAlignment = Enum.TextXAlignment.Left
     textBox.Parent = inputFrame
-    textBox.Focused:Connect(function() TweenService:Create(inputStroke, TweenInfo.new(0.15), {Transparency = 0.3, Color = Color3.new(1, 1, 1)}):Play() end)
-    textBox.FocusLost:Connect(function() TweenService:Create(inputStroke, TweenInfo.new(0.15), {Transparency = 0.88, Color = Color3.new(1, 1, 1)}):Play() end)
+    textBox.Focused:Connect(function() TweenService:Create(inputStroke, TweenInfo.new(0.15), {Transparency = 0.3}):Play() end)
+    textBox.FocusLost:Connect(function() TweenService:Create(inputStroke, TweenInfo.new(0.15), {Transparency = 0.7}):Play() end)
 
     local dividerY = inputStartY + elementHeight + 12
 
     local dividerLine = Instance.new("Frame")
-    dividerLine.Size = UDim2.new(1, 0, 0, 1)
+    dividerLine.Size = UDim2.new(1, 0, 0, 3)
     dividerLine.Position = UDim2.new(0, 0, 0, dividerY)
-    dividerLine.BackgroundColor3 = Color3.new(1, 1, 1)
-    dividerLine.BackgroundTransparency = 0.92
+    dividerLine.BackgroundColor3 = Arqel.Theme.Divider
     dividerLine.BorderSizePixel = 0
     dividerLine.Parent = mainFrame
 
@@ -2214,18 +1998,17 @@ local function BuildKeyUI()
         btn.Size = UDim2.new(0.75, 0, 0, buttonHeight)
         btn.Position = UDim2.new(0.5, 0, 0, yPos)
         btn.AnchorPoint = Vector2.new(0.5, 0)
-        btn.BackgroundColor3 = Color3.new(1, 1, 1)
-        btn.BackgroundTransparency = isPrimary and 0.82 or 0.93
+        btn.BackgroundColor3 = isPrimary and Arqel.Theme.Accent or Arqel.Theme.Input
         btn.BorderSizePixel = 0
         btn.Text = ""
         btn.AutoButtonColor = false
         btn.Parent = mainFrame
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
 
         local btnStroke = Instance.new("UIStroke", btn)
-        btnStroke.Color = Color3.new(1, 1, 1)
+        btnStroke.Color = isPrimary and Arqel.Theme.AccentHover or Arqel.Theme.Accent
         btnStroke.Thickness = 1
-        btnStroke.Transparency = isPrimary and 0.7 or 0.88
+        btnStroke.Transparency = isPrimary and 0.5 or 0.7
 
         local content = Instance.new("Frame")
         content.Size = UDim2.new(1, 0, 1, 0)
@@ -2254,29 +2037,21 @@ local function BuildKeyUI()
         label.Text = text
         label.TextColor3 = Arqel.Theme.Text
         label.TextSize = mobile and 14 or 15
-        label.FontFace = Fonts.SemiBold
+        label.Font = Enum.Font.ArimoBold
         label.LayoutOrder = 2
         label.Parent = content
 
-        local origBgTrans = btn.BackgroundTransparency
-        local origStrokeTrans = btnStroke.Transparency
-        local hoverBg = math.max(origBgTrans - 0.1, 0)
-        local hoverStroke = math.max(origStrokeTrans - 0.15, 0)
-        btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = hoverBg}):Play()
-            TweenService:Create(btnStroke, TweenInfo.new(0.15), {Transparency = hoverStroke}):Play()
-        end)
-        btn.MouseLeave:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = origBgTrans}):Play()
-            TweenService:Create(btnStroke, TweenInfo.new(0.15), {Transparency = origStrokeTrans}):Play()
-        end)
+        local origColor = btn.BackgroundColor3
+        local hoverColor = isPrimary and Arqel.Theme.AccentHover or Arqel.Theme.Accent
+        btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor}):Play() end)
+        btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = origColor}):Play() end)
         return btn
     end
 
     local acquireBtn = createButton(Arqel.Options.NoGetKey and "Unavailable" or "Get Key", Arqel.Options.NoGetKey and "nogetkey" or "key", false, acquireStartY)
     if Arqel.Options.NoGetKey then
         acquireBtn.Active = false
-        acquireBtn.BackgroundTransparency = 0.85
+        TweenService:Create(acquireBtn, TweenInfo.new(0), {BackgroundColor3 = Arqel.Theme.Pending}):Play()
     end
 
     local redeemBtn = createButton("Redeem Key", "shield", true, acquireStartY + buttonHeight + 5)
@@ -2286,13 +2061,12 @@ local function BuildKeyUI()
     userBtn.Size = UDim2.new(0, 36, 0, 36)
     userBtn.Position = UDim2.new(0.5, -44, 0, bottomY)
     userBtn.AnchorPoint = Vector2.new(0.5, 0)
-    userBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-    userBtn.BackgroundTransparency = 0.95
+    userBtn.BackgroundColor3 = Arqel.Theme.Background
     userBtn.BorderSizePixel = 0
     userBtn.Text = ""
     userBtn.AutoButtonColor = false
     userBtn.Parent = mainFrame
-    Instance.new("UICorner", userBtn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", userBtn).CornerRadius = UDim.new(0, 4)
 
     local userIcon = Instance.new("ImageLabel")
     userIcon.Size = UDim2.new(0, 18, 0, 18)
@@ -2303,20 +2077,19 @@ local function BuildKeyUI()
     userIcon.ImageColor3 = Arqel.Theme.TextDim
     userIcon.ScaleType = Enum.ScaleType.Fit
     userIcon.Parent = userBtn
-    userBtn.MouseEnter:Connect(function() TweenService:Create(userIcon, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.Text}):Play() end)
+    userBtn.MouseEnter:Connect(function() TweenService:Create(userIcon, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.Accent}):Play() end)
     userBtn.MouseLeave:Connect(function() TweenService:Create(userIcon, TweenInfo.new(0.15), {ImageColor3 = Arqel.Theme.TextDim}):Play() end)
 
     local discordBtn = Instance.new("TextButton")
     discordBtn.Size = UDim2.new(0, 36, 0, 36)
     discordBtn.Position = UDim2.new(0.5, 0, 0, bottomY)
     discordBtn.AnchorPoint = Vector2.new(0.5, 0)
-    discordBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-    discordBtn.BackgroundTransparency = 0.95
+    discordBtn.BackgroundColor3 = Arqel.Theme.Background
     discordBtn.BorderSizePixel = 0
     discordBtn.Text = ""
     discordBtn.AutoButtonColor = false
     discordBtn.Parent = mainFrame
-    Instance.new("UICorner", discordBtn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", discordBtn).CornerRadius = UDim.new(0, 4)
 
     local discordIcon = Instance.new("ImageLabel")
     discordIcon.Size = UDim2.new(0, 18, 0, 18)
@@ -2334,13 +2107,12 @@ local function BuildKeyUI()
     changelogBtn.Size = UDim2.new(0, 36, 0, 36)
     changelogBtn.Position = UDim2.new(0.5, 44, 0, bottomY)
     changelogBtn.AnchorPoint = Vector2.new(0.5, 0)
-    changelogBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-    changelogBtn.BackgroundTransparency = 0.95
+    changelogBtn.BackgroundColor3 = Arqel.Theme.Background
     changelogBtn.BorderSizePixel = 0
     changelogBtn.Text = ""
     changelogBtn.AutoButtonColor = false
     changelogBtn.Parent = mainFrame
-    Instance.new("UICorner", changelogBtn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", changelogBtn).CornerRadius = UDim.new(0, 4)
 
     local changelogIcon = Instance.new("ImageLabel")
     changelogIcon.Size = UDim2.new(0, 18, 0, 18)
@@ -2365,8 +2137,8 @@ local function BuildKeyUI()
         shopDivider.Size = UDim2.new(1, 0, 0, shopDividerHeight)
         shopDivider.Position = UDim2.new(0, 0, 1, -shopHeight - shopDividerHeight)
         shopDivider.AnchorPoint = Vector2.new(0, 0)
-        shopDivider.BackgroundColor3 = Color3.new(1, 1, 1)
-        shopDivider.BackgroundTransparency = 0.92
+        shopDivider.BackgroundColor3 = Arqel.Theme.Accent
+        shopDivider.BackgroundTransparency = 0.6
         shopDivider.BorderSizePixel = 0
         shopDivider.Parent = mainFrame
 
@@ -2374,11 +2146,20 @@ local function BuildKeyUI()
         shopFrame.Size = UDim2.new(1, 0, 0, shopHeight)
         shopFrame.Position = UDim2.new(0, 0, 1, -shopHeight)
         shopFrame.AnchorPoint = Vector2.new(0, 0)
-        shopFrame.BackgroundColor3 = Color3.new(1, 1, 1)
-        shopFrame.BackgroundTransparency = 0.93
+        shopFrame.BackgroundColor3 = Arqel.Theme.Header
         shopFrame.BorderSizePixel = 0
         shopFrame.ClipsDescendants = true
         shopFrame.Parent = mainFrame
+
+        local shopCorner = Instance.new("UICorner", shopFrame)
+        shopCorner.CornerRadius = UDim.new(0, 4)
+
+        local shopTopFix = Instance.new("Frame")
+        shopTopFix.Size = UDim2.new(1, 0, 0, 8)
+        shopTopFix.Position = UDim2.new(0, 0, 0, 0)
+        shopTopFix.BackgroundColor3 = Arqel.Theme.Header
+        shopTopFix.BorderSizePixel = 0
+        shopTopFix.Parent = shopFrame
 
         local shopPadding = 14
         local shopIconSize = 28
@@ -2387,16 +2168,16 @@ local function BuildKeyUI()
         shopIconWrapper.Size = UDim2.new(0, shopIconSize + 4, 0, shopIconSize + 4)
         shopIconWrapper.Position = UDim2.new(0, shopPadding, 0.5, 0)
         shopIconWrapper.AnchorPoint = Vector2.new(0, 0.5)
-        shopIconWrapper.BackgroundColor3 = Color3.new(1, 1, 1)
-        shopIconWrapper.BackgroundTransparency = 0.9
+        shopIconWrapper.BackgroundColor3 = Arqel.Theme.Accent
+        shopIconWrapper.BackgroundTransparency = 0.7
         shopIconWrapper.BorderSizePixel = 0
         shopIconWrapper.Parent = shopFrame
-        Instance.new("UICorner", shopIconWrapper).CornerRadius = UDim.new(0, 8)
+        Instance.new("UICorner", shopIconWrapper).CornerRadius = UDim.new(0, 4)
 
         local shopIconStroke = Instance.new("UIStroke", shopIconWrapper)
-        shopIconStroke.Color = Color3.new(1, 1, 1)
+        shopIconStroke.Color = Arqel.Theme.Accent
         shopIconStroke.Thickness = 1
-        shopIconStroke.Transparency = 0.85
+        shopIconStroke.Transparency = 0.5
 
         local shopIconImg = Instance.new("ImageLabel")
         shopIconImg.Size = UDim2.new(0, shopIconSize, 0, shopIconSize)
@@ -2419,7 +2200,7 @@ local function BuildKeyUI()
         shopTitle.Text = Arqel.Shop.Title
         shopTitle.TextColor3 = Arqel.Theme.Text
         shopTitle.TextSize = mobile and 13 or 14
-        shopTitle.FontFace = Fonts.SemiBold
+        shopTitle.Font = Enum.Font.ArimoBold
         shopTitle.TextXAlignment = Enum.TextXAlignment.Left
         shopTitle.TextTruncate = Enum.TextTruncate.AtEnd
         shopTitle.Parent = shopFrame
@@ -2431,7 +2212,7 @@ local function BuildKeyUI()
         shopSubtitle.Text = Arqel.Shop.Subtitle
         shopSubtitle.TextColor3 = Arqel.Theme.TextDim
         shopSubtitle.TextSize = mobile and 10 or 11
-        shopSubtitle.FontFace = Fonts.SemiBold
+        shopSubtitle.Font = Enum.Font.ArimoBold
         shopSubtitle.TextXAlignment = Enum.TextXAlignment.Left
         shopSubtitle.TextTruncate = Enum.TextTruncate.AtEnd
         shopSubtitle.Parent = shopFrame
@@ -2440,18 +2221,17 @@ local function BuildKeyUI()
         buyBtn.Size = UDim2.new(0, buyBtnWidth, 0, 30)
         buyBtn.Position = UDim2.new(1, -shopPadding, 0.5, 0)
         buyBtn.AnchorPoint = Vector2.new(1, 0.5)
-        buyBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-        buyBtn.BackgroundTransparency = 0.82
+        buyBtn.BackgroundColor3 = Arqel.Theme.Accent
         buyBtn.BorderSizePixel = 0
         buyBtn.Text = ""
         buyBtn.AutoButtonColor = false
         buyBtn.Parent = shopFrame
-        Instance.new("UICorner", buyBtn).CornerRadius = UDim.new(0, 8)
+        Instance.new("UICorner", buyBtn).CornerRadius = UDim.new(0, 4)
 
         local buyBtnStroke = Instance.new("UIStroke", buyBtn)
-        buyBtnStroke.Color = Color3.new(1, 1, 1)
+        buyBtnStroke.Color = Arqel.Theme.AccentHover
         buyBtnStroke.Thickness = 1
-        buyBtnStroke.Transparency = 0.7
+        buyBtnStroke.Transparency = 0.5
 
         local buyContent = Instance.new("Frame")
         buyContent.Size = UDim2.new(1, 0, 1, 0)
@@ -2480,18 +2260,12 @@ local function BuildKeyUI()
         buyLabel.Text = Arqel.Shop.ButtonText
         buyLabel.TextColor3 = Arqel.Theme.Text
         buyLabel.TextSize = mobile and 11 or 12
-        buyLabel.FontFace = Fonts.SemiBold
+        buyLabel.Font = Enum.Font.ArimoBold
         buyLabel.LayoutOrder = 2
         buyLabel.Parent = buyContent
 
-        buyBtn.MouseEnter:Connect(function()
-            TweenService:Create(buyBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.7}):Play()
-            TweenService:Create(buyBtnStroke, TweenInfo.new(0.15), {Transparency = 0.55}):Play()
-        end)
-        buyBtn.MouseLeave:Connect(function()
-            TweenService:Create(buyBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.82}):Play()
-            TweenService:Create(buyBtnStroke, TweenInfo.new(0.15), {Transparency = 0.7}):Play()
-        end)
+        buyBtn.MouseEnter:Connect(function() TweenService:Create(buyBtn, TweenInfo.new(0.15), {BackgroundColor3 = Arqel.Theme.AccentHover}):Play() end)
+        buyBtn.MouseLeave:Connect(function() TweenService:Create(buyBtn, TweenInfo.new(0.15), {BackgroundColor3 = Arqel.Theme.Accent}):Play() end)
         buyBtn.MouseButton1Click:Connect(function()
             if Arqel.Shop.Link ~= "" then
                 pcall(function() setclipboard(Arqel.Shop.Link) end)
@@ -2512,7 +2286,7 @@ local function BuildKeyUI()
         if dotsThread then task.cancel(dotsThread) dotsThread = nil end
         local color, icon, text = Arqel.Theme.StatusIdle, getIcon("lock"), customText or "No key detected"
         if state == "verifying" then
-            color, icon, text = Arqel.Theme.Text, getIcon("loading"), "Verifying key"
+            color, icon, text = Arqel.Theme.Accent, getIcon("loading"), "Verifying key"
             spinConnection = RunService.Heartbeat:Connect(function(dt)
                 if statusIcon and statusIcon.Parent then statusIcon.Rotation = (statusIcon.Rotation + dt * 360) % 360
                 else if spinConnection then spinConnection:Disconnect() end end
@@ -2540,10 +2314,8 @@ local function BuildKeyUI()
         Arqel:Notify("Goodbye", "See you next time!", 2, "close")
         closeDoorsThenExit(function()
             fullCleanup()
-            disableBlur()
             TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
             TweenService:Create(mainFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
             task.wait(0.4) screenGui:Destroy()
             if Arqel.Callbacks.OnClose then Arqel.Callbacks.OnClose() end
         end)
@@ -2580,7 +2352,6 @@ local function BuildKeyUI()
                 disableBlur()
                 TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
                 TweenService:Create(mainFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-                TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
                 task.wait(0.4) screenGui:Destroy()
                 if not Internal.IsJunkieMode and Arqel.Callbacks.OnSuccess then Arqel.Callbacks.OnSuccess() end
             end)
