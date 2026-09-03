@@ -156,7 +156,7 @@ local function CreateWindowAcrylic(guiObject)
 
 	local fallback = Instance.new("Frame")
 	fallback.Name = "AcrylicFallback"
-	fallback.BackgroundColor3 = Color3.fromRGB(27, 38, 34)
+	fallback.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
 	fallback.BackgroundTransparency = 0.88
 	fallback.BorderSizePixel = 0
 	fallback.Size = UDim2.fromScale(1, 1)
@@ -170,9 +170,9 @@ local function CreateWindowAcrylic(guiObject)
 
 	local fallbackGradient = Instance.new("UIGradient")
 	fallbackGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 55, 50)),
-		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(25, 36, 32)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 28, 25)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 30, 30)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(18, 18, 18)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 12)),
 	})
 	fallbackGradient.Rotation = 118
 	fallbackGradient.Parent = fallback
@@ -1894,8 +1894,8 @@ local function BuildKeylessUI()
     launchLabel.LayoutOrder = 2
     launchLabel.Parent = launchContent
 
-    launchBtn.MouseEnter:Connect(function() TweenService:Create(launchBtn, TweenInfo.new(0.15), {BackgroundColor3 = Arqel.Theme.Text}):Play() end)
-    launchBtn.MouseLeave:Connect(function() TweenService:Create(launchBtn, TweenInfo.new(0.15), {BackgroundColor3 = Arqel.Theme.Text}):Play() end)
+    launchBtn.MouseEnter:Connect(function() TweenService:Create(launchBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.72}):Play() end)
+    launchBtn.MouseLeave:Connect(function() TweenService:Create(launchBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.82}):Play() end)
 
     local bottomY = contentY + 153
 
@@ -2276,7 +2276,7 @@ local function BuildKeyUI()
     local acquireBtn = createButton(Arqel.Options.NoGetKey and "Unavailable" or "Get Key", Arqel.Options.NoGetKey and "nogetkey" or "key", false, acquireStartY)
     if Arqel.Options.NoGetKey then
         acquireBtn.Active = false
-        TweenService:Create(acquireBtn, TweenInfo.new(0), {BackgroundColor3 = Arqel.Theme.Pending}):Play()
+        acquireBtn.BackgroundTransparency = 0.85
     end
 
     local redeemBtn = createButton("Redeem Key", "shield", true, acquireStartY + buttonHeight + 5)
@@ -2374,7 +2374,8 @@ local function BuildKeyUI()
         shopFrame.Size = UDim2.new(1, 0, 0, shopHeight)
         shopFrame.Position = UDim2.new(0, 0, 1, -shopHeight)
         shopFrame.AnchorPoint = Vector2.new(0, 0)
-        shopFrame.BackgroundTransparency = 1
+        shopFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+        shopFrame.BackgroundTransparency = 0.93
         shopFrame.BorderSizePixel = 0
         shopFrame.ClipsDescendants = true
         shopFrame.Parent = mainFrame
@@ -2542,6 +2543,7 @@ local function BuildKeyUI()
             disableBlur()
             TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
             TweenService:Create(mainFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
             task.wait(0.4) screenGui:Destroy()
             if Arqel.Callbacks.OnClose then Arqel.Callbacks.OnClose() end
         end)
@@ -2578,6 +2580,7 @@ local function BuildKeyUI()
                 disableBlur()
                 TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {Position = UDim2.new(0.5, 0, -0.5, 0)}):Play()
                 TweenService:Create(mainFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+                TweenService:Create(mainStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
                 task.wait(0.4) screenGui:Destroy()
                 if not Internal.IsJunkieMode and Arqel.Callbacks.OnSuccess then Arqel.Callbacks.OnSuccess() end
             end)
