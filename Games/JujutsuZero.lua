@@ -9,7 +9,8 @@ local Workspace = game:GetService("Workspace")
 -- Конфигурация
 local CONFIG = {
 	SourceUrl = "https://raw.githubusercontent.com/ReversalReside/ReversalHub/refs/heads/main/src/ui/ReversalUI.lua",
-	CloudBaseUrl = "https://node-server-cloud-base.vercel.app/api", 
+	CloudBaseUrl = "https://node-server-cloud-base.vercel.app/api",
+	DISCORD_INVITE = "https://discord.gg/UPZAXQ6tTm",
 }
 
 local VindUI = loadstring(game:HttpGet(CONFIG.SourceUrl))()
@@ -84,6 +85,32 @@ Homepage:AddCard({
 	Description = greeting(),
 })
 
+Homepage:AddButton({
+	Text        = "Discord Server",
+	Description = "Join our community Discord for script support, updates, bug reports and giveaways",
+	Icon        = "Lucide:message-circle",
+	Callback    = function()
+		local copied = false
+		pcall(function()
+			copied = pcall(setclipboard, CONFIG.DISCORD_INVITE)
+		end)
+		if not copied then
+			pcall(function()
+				copied = pcall(function()
+					clipboard.set(CONFIG.DISCORD_INVITE)
+					return true
+				end)
+			end)
+		end
+		VindUI:Notify({
+			Title = "Discord",
+			Text  = copied and "Invite link copied to clipboard!" or "Copy failed — link: " .. CONFIG.DISCORD_INVITE,
+			Type  = copied and "success" or "error",
+			Duration = 3,
+		})
+	end,
+})
+
 Homepage:AddSection("Server Information", "Lucide:server")
 Homepage:AddInfoGrid({
 	Title = "Server Stats",
@@ -102,12 +129,14 @@ local systemGrid = Homepage:AddSystemInfoGrid({
 	Description = "Client performance info",
 })
 
-local ScriptChangelog = Tabs.Home:AddSubTab({ Name = "Changelog", Icon = "Lucide:file-text" })
+local ScriptChangelog = Tabs.Home:AddSubTab({ Name = "What's New", Icon = "Lucide:file-text" })
 
 ScriptChangelog:AddChangelogEntry({
 	Version = "Reversal: Zero 5.4",
 	Date    = os.date("%d.%m.%Y"),
 	Changes = {
+		{ Type = "Added",   Text = "Collector tab: Auto Collect Chest — teleports to every enabled chest type and opens it through the game's own interact flow (prompt -> Interact -> OpenCrate). Per-type toggles for all chests; crate-rain-only chests sit under the 'Admin Events' divider. Settings toggle 'Insta proximity prompt' controls instant vs. waited prompt activation." },
+		{ Type = "Added",   Text = "Settings tab: Anti AFK — answers Roblox's idle check (Idled -> VirtualUser:CaptureController) so the server never idle-kicks you." },
 		{ Type = "Fixed",   Text = "Freeze now holds you in place without locking movement, so abilities stay usable" },
 		{ Type = "Added",   Text = "Auto R/F/C/X/Z/V/Y/T now cast the equipped technique skills directly via SkillController (no more fake keypresses)" },
 		{ Type = "Added",   Text = "Bypass tab: [1360LVL] Auto Claim Onmitsu Elite — claims the Lv.1360 quest via QuestService.AcceptQuest, skipping the client-side level gate" },
@@ -253,11 +282,16 @@ Tabs.General:AddToggle({
 	end,
 })
 
+Tabs.General:AddLineText("Im IDK what here add")
+
 -- ==================== FARMING TAB ====================
 
 Tabs.Farming = Window:AddTab({ Name = "Farming", Icon = "Lucide:wheat" })
 
-Tabs.Farming:AddSection("Settings Farm", "Lucide:user")
+local FarmingMain = Tabs.Farming:AddSubTab({ Name = "Controller", Icon = "Lucide:wheat" })
+local RaidWorldTab = Tabs.Farming:AddSubTab({ Name = "World Raid", Icon = "Lucide:swords" })
+
+FarmingMain:AddSection("Settings Farm", "Lucide:user")
 
 -- === FREEZE CHARACTER IMPLEMENTATION ===
 -- Jujutsu: Zero moves the visible (Visual/World) model by pivoting it to the
@@ -356,9 +390,9 @@ local function applyFreeze(freeze)
 	end
 end
 
-Tabs.Farming:AddToggle({
+FarmingMain:AddToggle({
 	Text        = "Freeze Character",
-	Description = "Completely freezes your character (ignores hits/physics)",
+	Description = "Completely freezes your character (ignores velocity/physics)",
 	Icon        = "Lucide:snowflake",
 	Flag        = "freezeChar",
 	Default     = false,
@@ -404,7 +438,7 @@ for _, slot in ipairs(SpecialSlots) do table.insert(AllSlots, slot) end
 local function addAutoToggles(group)
 	for _, slot in ipairs(group) do
 		local key = slot.Key
-		Tabs.Farming:AddToggle({
+FarmingMain:AddToggle({
 			Text        = "Auto " .. key,
 			Description = "Auto-cast " .. slot.Keybind .. " (" .. key .. ")",
 			Icon        = "Lucide:refresh-cw",
@@ -443,10 +477,10 @@ task.spawn(function()
 	end
 end)
 
-Tabs.Farming:AddLineText("AutoUse")
+FarmingMain:AddLineText("AutoUse")
 addAutoToggles(AutoSlots)
 
-Tabs.Farming:AddLineText("Special AutoUse")
+FarmingMain:AddLineText("Special AutoUse")
 addAutoToggles(SpecialSlots)
 
 -- ==================== AUTORAID ====================
@@ -634,9 +668,9 @@ local function StartAutoRaid()
 	end)
 end
 
-Tabs.Farming:AddLineText("AutoWorldRaid")
+RaidWorldTab:AddLineText("AutoWorldRaid")
 
-Tabs.Farming:AddDropdown({
+RaidWorldTab:AddDropdown({
 	Text        = "Select World Raid",
 	Description = "Choose which Overworld Raid to auto-farm",
 	Icon        = "Lucide:swords",
@@ -648,7 +682,7 @@ Tabs.Farming:AddDropdown({
 	end,
 })
 
-Tabs.Farming:AddDropdown({
+RaidWorldTab:AddDropdown({
 	Text        = "Raid Difficulty",
 	Description = "Difficulty for the selected world raid (Easy .. Calamity)",
 	Icon        = "Lucide:list",
@@ -661,7 +695,7 @@ Tabs.Farming:AddDropdown({
 	end,
 })
 
-Tabs.Farming:AddToggle({
+RaidWorldTab:AddToggle({
 	Text        = "AutoRaid",
 	Description = "Auto-enters the selected Overworld Raid. Re-enters automatically if the game kicks you out.",
 	Icon        = "Lucide:swords",
@@ -755,7 +789,7 @@ local function StopBossTP()
 	getgenv().AutoBossTPEnabled = false
 end
 
-Tabs.Farming:AddToggle({
+RaidWorldTab:AddToggle({
 	Text        = "AutoTP On Boss NPC",
 	Description = "Teleports you next to the raid boss the moment it is alive (on spawn and after kill/respawn). Only works for boss raids (not wave raids).",
 	Icon        = "Lucide:crosshair",
@@ -767,254 +801,6 @@ Tabs.Farming:AddToggle({
 		else
 			StopBossTP()
 		end
-	end,
-})
-
--- ========================================================================
--- STRONGEST RAID (THE STRONGEST OF TODAY)
--- This raid is a LOBBY raid (RaidController / RaidState.BossID == "Strongest"),
--- NOT a BossIsland: while inside it BossIslandController.ActiveIsland is nil, so the
--- AutoWorldRaid and "AutoTP On Boss NPC" toggles above will NOT fire. Keep
--- AutoWorldRaid OFF during this raid or it will try to queue a world raid.
--- Fight flow:
---   1) damage the boss directly                -> RaidBoss.ServerModel is alive+parented
---   2) destroy GravityCores (orbs) with abilities -> the boss hides (IsDestroyed) and the
---      orbs spawn at the active arena's gravity-core spawnpoints (static Red/Blue markers)
---   3) domain expansion                        -> damage the boss again
--- Boss detection: RaidBoss.ServerModel.PrimaryPart when not IsDestroyed.
--- Orb detection: GRAVCORE* waypoints from MapController, then live hittable parts near the
--- arena's core markers, then the marker positions themselves as fallback.
--- ========================================================================
-
-local StrongestArenas = {
-	{ Boss = Vector3.new(1676.4, 795.6, -2917.5), Cores = {
-		Vector3.new(1518.4, 814.9, -2095.9),
-		Vector3.new(1743.9, 814.4, -2075.4),
-		Vector3.new(1752.4, 814.9, -1788.9),
-		Vector3.new(1544.9, 814.4, -1789.4),
-	} },
-	{ Boss = Vector3.new(1392.0, 267.4, 1103.0), Cores = {
-		Vector3.new(1426.5, 264.4, 1102.5),
-	} },
-	{ Boss = Vector3.new(1644.9, 800.0, -1951.4), Cores = {
-		Vector3.new(1653.4, 829.9, -1788.9),
-		Vector3.new(1626.4, 814.9, -2100.9),
-		Vector3.new(1481.3, 814.4, -1979.4),
-		Vector3.new(1762.4, 814.9, -2007.9),
-		Vector3.new(1765.9, 814.4, -1837.4),
-		Vector3.new(1514.9, 814.4, -1782.4),
-	} },
-}
-
-local RaidControllerMod = nil
-local MapControllerMod = nil
-
-local function getRaidController()
-	if not RaidControllerMod then
-		local ok, mod = pcall(require, LocalPlayer:WaitForChild("PlayerScripts").Client.Controllers.RaidController)
-		if ok then RaidControllerMod = mod end
-	end
-	return RaidControllerMod
-end
-
-local function getMapController()
-	if not MapControllerMod then
-		local ok, mod = pcall(require, LocalPlayer:WaitForChild("PlayerScripts").Client.Controllers.MapController)
-		if ok then MapControllerMod = mod end
-	end
-	return MapControllerMod
-end
-
-local function inStrongestRaid()
-	local RC = getRaidController()
-	return RC and RC.RaidState and RC.RaidState.BossID == "Strongest"
-end
-
-local function getStrongestBoss()
-	local RC = getRaidController()
-	if not RC or not RC.RaidBoss or RC.RaidBoss.IsDestroyed then return nil end
-	return RC.RaidBoss
-end
-
-local function getStrongestBossPos()
-	local boss = getStrongestBoss()
-	if not boss or not boss.ServerModel then return nil end
-	local root = boss.ServerModel.PrimaryPart or boss.ServerModel:FindFirstChild("HumanoidRootPart")
-	if not root then return nil end
-	return root.Position
-end
-
-local function getMyPos()
-	local CC = getCharacterController()
-	local lc = CC and CC.LocalCharacter
-	if lc and lc.ServerModel and lc.ServerModel.PrimaryPart then
-		return lc.ServerModel.PrimaryPart.Position
-	end
-	return nil
-end
-
--- Resolve a waypoint record (obfuscated / unknown layout) into a world position.
-local function waypointPosition(wp)
-	if typeof(wp) ~= "table" then return nil end
-	local field = wp.WorldPosition or wp.Position or wp.CFrame
-	if typeof(field) == "Vector3" then return field end
-	if typeof(field) == "CFrame" then return field.Position end
-	if typeof(field) == "Instance" then
-		return field:IsA("BasePart") and field.Position or nil
-	end
-	local inst = wp.Instance or wp.PrimaryPart
-	if typeof(inst) == "Instance" and inst:IsA("BasePart") then return inst.Position end
-	return nil
-end
-
-local function nearestTo(pos, a, b)
-	if not pos then return a or b end
-	if not a then return b end
-	if not b then return a end
-	return (pos - a).Magnitude <= (pos - b).Magnitude and a or b
-end
-
--- The active arena = the one whose boss spawnpoint is closest to the player.
-local function getActiveArena()
-	local myPos = getMyPos()
-	if not myPos then return StrongestArenas[1] end
-	local bestArena, bestD = StrongestArenas[1], math.huge
-	for _, arena in ipairs(StrongestArenas) do
-		local d = (myPos - arena.Boss).Magnitude
-		if d < bestD then bestArena, bestD = arena, d end
-	end
-	return bestArena
-end
-
--- Nearest live gravity core position, or nil. Priority: GRAVCORE* waypoints,
--- then visible/hittable parts at the active arena's core markers.
-local function getStrongestOrbPos()
-	local myPos = getMyPos()
-
-	local MC = getMapController()
-	if MC and MC.Waypoints then
-		local best
-		local waypoints = MC.Waypoints
-		for _, wp in pairs(waypoints) do
-			if typeof(wp) == "table" then
-				local name = typeof(wp.Name) == "string" and wp.Name or ""
-				if name:sub(1, 8):upper() == "GRAVCORE" then
-					local pos = waypointPosition(wp)
-					if pos then best = nearestTo(myPos, best, pos) end
-				end
-			end
-		end
-		if best then return best end
-	end
-
-	local arena = getActiveArena()
-	local lc = getCharacterController() and getCharacterController().LocalCharacter
-	local myChar = lc and lc.ServerModel
-
-	-- Single pass: any visible base part within 8 studs of one of the active
-	-- arena's core markers and not part of the local character counts as a core.
-	local best, minD = nil, math.huge
-	for _, part in ipairs(Workspace:GetDescendants()) do
-		if part:IsA("BasePart") and part.Transparency < 0.9 then
-			local p = part.Position
-			local nearMarker = false
-			for _, marker in ipairs(arena.Cores) do
-				if (p - marker).Magnitude <= 8 then nearMarker = true break end
-			end
-			if nearMarker then
-				if not (myChar and myChar:IsAncestorOf(part)) then
-					local d = myPos and (myPos - p).Magnitude or 0
-					if not best or d < minD then best, minD = p, d end
-				end
-			end
-		end
-	end
-	if best then return best end
-
-	return nil
-end
-
-local function teleportStrongest(pos)
-	local CC = getCharacterController()
-	local lc = CC and CC.LocalCharacter
-	if not (lc and lc.ServerModel and lc.ServerModel.PrimaryPart) then return "no_char" end
-	if not pos then return "no_target" end
-	lc.ServerModel:SetPrimaryPartCFrame(CFrame.lookAt(pos + Vector3.new(8, 6, 8), pos))
-	return "tp"
-end
-
--- ONE shared loop; which targets are used depends on which toggles are on.
--- Orbs are prioritized over the boss (the boss is hidden while orbs are up).
-local AutoStrongestTP = false
-local AutoStrongestBoss = false
-local AutoStrongestOrbs = false
-
-local function StartStrongestTP()
-	if getgenv().AutoStrongestTP then return end
-	AutoStrongestTP = true
-	getgenv().AutoStrongestTP = true
-	task.spawn(function()
-		local lastTarget
-		while AutoStrongestTP do
-			if inStrongestRaid() then
-				local orbPos = AutoStrongestOrbs and getStrongestOrbPos() or nil
-				local bossPos = AutoStrongestBoss and getStrongestBossPos() or nil
-				local target = orbPos or bossPos
-				local myPos = getMyPos()
-				local dist = target and myPos and (myPos - target).Magnitude or 9999
-				if target and (lastTarget ~= target or dist > 20) then
-					lastTarget = target
-					pcall(teleportStrongest, target)
-				end
-			else
-				lastTarget = nil
-			end
-			task.wait(0.6)
-		end
-	end)
-end
-
-local function StopStrongestTP()
-	AutoStrongestTP = false
-	getgenv().AutoStrongestTP = false
-end
-
-Tabs.Farming:AddLineText("Strongest Raid (Strongest of Today)")
-
-Tabs.Farming:AddToggle({
-	Text        = "AutoTP Strongest [Boss]",
-	Description = "Teleports next to the Strongest raid boss whenever it is alive. Only active in the Strongest of Today lobby raid (BossID == \"Strongest\").",
-	Icon        = "Lucide:crosshair",
-	Flag        = "autoTPStrongestBoss",
-	Default     = false,
-	Callback    = function(value)
-		AutoStrongestBoss = value
-		if value then StartStrongestTP() elseif not AutoStrongestOrbs then StopStrongestTP() end
-	end,
-})
-
-Tabs.Farming:AddToggle({
-	Text        = "AutoTP Strongest [Orbs]",
-	Description = "Teleports to the nearest Gravity Core orb (stage 2, hollow-purple balls). Orb positions come from GRAVCORE waypoints and the arena orb spawnpoints.",
-	Icon        = "Lucide:circle-dot",
-	Flag        = "autoTPStrongestOrbs",
-	Default     = false,
-	Callback    = function(value)
-		AutoStrongestOrbs = value
-		if value then StartStrongestTP() elseif not AutoStrongestBoss then StopStrongestTP() end
-	end,
-})
-
-Tabs.Farming:AddToggle({
-	Text        = "AutoTP Strongest [Auto]",
-	Description = "Auto mode: teleports to orbs when they are up (boss is hidden then), otherwise to the boss. Uses the two toggles above.",
-	Icon        = "Lucide:bot",
-	Flag        = "autoTPStrongest",
-	Default     = false,
-	Callback    = function(value)
-		AutoStrongestBoss = value
-		AutoStrongestOrbs = value
-		if value then StartStrongestTP() else StopStrongestTP() end
 	end,
 })
 
@@ -1406,6 +1192,190 @@ Tabs.Comparator:AddButton({
 	end,
 })
 
+-- ==================== COLLECTOR TAB ====================
+-- Collects EVERY chest type. Live crates are Parts under
+-- workspace.Map.ActiveCrates named "<Type>_<index>" — the config key is the part
+-- name prefix before the first underscore. MapController.AddCrate spawns a
+-- ProximityPrompt on each unopened crate and InteractCrate destroys that prompt
+-- and calls OpenCrate(part.Name). We drive that exact path: teleport
+-- ServerModel + WorldModel next to the crate, then fire
+-- InterfaceController.Interfaces.Interact.Interacted with the crate's RAW prompt
+-- instance (MapController matches it by reference, so running InteractCrate is
+-- guaranteed). Crates already in PlayerData.ExplorationCrates get skipped.
+getgenv().AutoCollectChest = getgenv().AutoCollectChest or false
+getgenv().AutoCollectTypes = getgenv().AutoCollectTypes or {}
+getgenv().InstaProxPrompt = getgenv().InstaProxPrompt or true
+
+-- Normal open-world crates on top; crate-rain-only chests (Admin Events) at the
+-- very bottom under a divider line, per feature spec.
+local CollectorTypes = {
+	{ ID = "Expl1",            Label = "Grade 3 Crate (Expl1)" },
+	{ ID = "Expl2",            Label = "Grade 2 Crate (Expl2)" },
+	{ ID = "Expl3",            Label = "Grade 1 Crate (Expl3)" },
+	{ ID = "SpecialCrate",     Label = "Special Crate" },
+	{ ID = "OverworldFinal-1", Label = "Final Crate I" },
+	{ ID = "OverworldFinal-2", Label = "Final Crate II" },
+	{ ID = "OverworldFinal-3", Label = "Final Crate III" },
+	{ ID = "OverworldFinal-4", Label = "Final Crate IV" },
+	{ ID = "OverworldFinal-5", Label = "Final Crate V" },
+	{ ID = "OverworldFinal-6", Label = "Final Crate VI" },
+	{ ID = "Invest1",          Label = "Hidden Crate (Invest1)" },
+	{ ID = "SummerExpl",       Label = "Beach Ball (SummerExpl)" },
+	{ ID = "SummerSpecial",    Label = "Beach Ball (SummerSpecial)" },
+}
+
+local CollectorAdminEventTypes = {
+	{ ID = "LiveEventCrate1",  Label = "Event Crate" },
+	{ ID = "LiveEventCrate2",  Label = "Lucky Event Crate" },
+	{ ID = "LiveEventCrate3",  Label = "Boosted Event Crate" },
+	{ ID = "TechniqueCrate",   Label = "Technique Crate" },
+	{ ID = "DivineCrate",      Label = "Divine Crate" },
+	{ ID = "LevelTestCrate",   Label = "Level Test Crate" },
+}
+
+for _, t in ipairs(CollectorTypes) do
+	if getgenv().AutoCollectTypes[t.ID] == nil then
+		getgenv().AutoCollectTypes[t.ID] = true
+	end
+end
+for _, t in ipairs(CollectorAdminEventTypes) do
+	if getgenv().AutoCollectTypes[t.ID] == nil then
+		getgenv().AutoCollectTypes[t.ID] = true
+	end
+end
+
+local function setCollectType(id, value)
+	getgenv().AutoCollectTypes[id] = value
+end
+
+local localCharacter = nil
+
+local function collectorTeleportTo(cratePos)
+	if not localCharacter then return end
+	local target = cratePos + Vector3.new(0, 1, 0)
+	local spot = CFrame.lookAt(target + Vector3.new(4, 5, 4), target)
+	if localCharacter.ServerModel and localCharacter.ServerModel.PrimaryPart then
+		localCharacter.ServerModel:SetPrimaryPartCFrame(spot)
+	end
+	if localCharacter.WorldModel and localCharacter.WorldModel.PrimaryPart then
+		localCharacter.WorldModel.PrimaryPart.CFrame = spot
+	end
+end
+
+local function collectOnce()
+	local ok, err = pcall(function()
+		local PlayerDataController = require(LocalPlayer:WaitForChild("PlayerScripts").Client.Controllers.PlayerDataController)
+		local Interact = require(LocalPlayer:WaitForChild("PlayerScripts").Client.Controllers.InterfaceController.Interfaces.Interact)
+		local CC = getCharacterController()
+		localCharacter = CC and CC.LocalCharacter
+
+		local folder = workspace.Map:FindFirstChild("ActiveCrates")
+		if not (folder and localCharacter and localCharacter.ServerModel and Interact.Interacted) then return end
+
+		for _, crate in folder:GetChildren() do
+			if not getgenv().AutoCollectChest then break end
+			local typeID = crate.Name:split("_")[1]
+
+			local prompt = crate:FindFirstChildWhichIsA("ProximityPrompt")
+			local inOpened = PlayerDataController.PlayerData.ExplorationCrates[crate.Name] ~= nil
+
+			if getgenv().AutoCollectTypes[typeID]
+				and not inOpened
+				and prompt
+				and prompt.Enabled
+			then
+				collectorTeleportTo(crate.Position)
+
+				if getgenv().InstaProxPrompt then
+					task.wait(0.25)
+					Interact.Interacted:Fire(prompt)
+				else
+					-- Wait for the game to actually show this prompt, then open it.
+					local PPS = game:GetService("ProximityPromptService")
+					local shown = false
+					local conn = PPS.PromptShown:Connect(function(p)
+						if p == prompt then shown = true end
+					end)
+					local t0 = os.clock()
+					while not shown and os.clock() - t0 < 2.5 and getgenv().AutoCollectChest do
+						task.wait(0.05)
+					end
+					conn:Disconnect()
+					if shown then
+						Interact.Interacted:Fire(prompt)
+					end
+				end
+
+				-- Wait for the server to confirm (crate removed from opened set / node gone).
+				local t1 = os.clock()
+				while os.clock() - t1 < 2.2 and getgenv().AutoCollectChest do
+					if PlayerDataController.PlayerData.ExplorationCrates[crate.Name] then break end
+					if not folder:FindFirstChild(crate.Name) then break end
+					task.wait(0.1)
+				end
+			end
+		end
+	end)
+	if not ok then
+		warn("Reversal Collect: " .. tostring(err))
+	end
+end
+
+local function StartCollector()
+	getgenv().AutoCollectChest = true
+	task.spawn(function()
+		while getgenv().AutoCollectChest do
+			collectOnce()
+			task.wait(0.8)
+		end
+	end)
+end
+
+local function StopCollector()
+	getgenv().AutoCollectChest = false
+end
+
+Tabs.Collector = Window:AddTab({ Name = "Collector", Icon = "Lucide:gift" })
+
+Tabs.Collector:AddSection("Crate Collection", "Lucide:box")
+
+Tabs.Collector:AddToggle({
+	Text        = "Auto Collect Chest",
+	Description = "Teleports to every enabled chest type and opens it through the game's own interact flow (prompt -> Interact -> OpenCrate).",
+	Icon        = "Lucide:gift",
+	Flag        = "autoCollectChest",
+	Default     = false,
+	Callback    = function(value)
+		if value then StartCollector() else StopCollector() end
+	end,
+})
+
+for _, t in ipairs(CollectorTypes) do
+	Tabs.Collector:AddToggle({
+		Text        = t.Label,
+		Icon        = "Lucide:package",
+		Flag        = "collect_" .. t.ID:gsub("[^%w]", "_"),
+		Default     = getgenv().AutoCollectTypes[t.ID],
+		Callback    = function(value)
+			setCollectType(t.ID, value)
+		end,
+	})
+end
+
+Tabs.Collector:AddLineText("Admin Events")
+
+for _, t in ipairs(CollectorAdminEventTypes) do
+	Tabs.Collector:AddToggle({
+		Text        = t.Label,
+		Icon        = "Lucide:star",
+		Flag        = "collect_" .. t.ID:gsub("[^%w]", "_"),
+		Default     = getgenv().AutoCollectTypes[t.ID],
+		Callback    = function(value)
+			setCollectType(t.ID, value)
+		end,
+	})
+end
+
 -- ==================== DIVIDER LINE ====================
 Window:AddTabLine()
 
@@ -1433,6 +1403,52 @@ Tabs.Settings:AddButton({
 			Type = "success",
 			Duration = 3
 		})
+	end,
+})
+
+-- ==================== ANTI-AFK ====================
+-- The kick is triggered by Roblox firing Players.LocalPlayer.Idled after a
+-- stretch of no input — that's what lets the server mark you idle and TP/kick
+-- you. The standard fix is to answer that idle check the INSTANT it fires via
+-- VirtualUser:CaptureController (plus ClickButton2, matching the canonical
+-- anti-AFK). No movement, no teleports.
+local AntiAFKConn = nil
+local VirtualUser = game:GetService("VirtualUser")
+
+local function SetAntiAFK(on)
+	getgenv().AntiAFKEnabled = on
+	if on and not AntiAFKConn then
+		AntiAFKConn = LocalPlayer.Idled:Connect(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
+		VindUI:Notify({ Title = "Anti AFK", Text = "Enabled", Type = "success", Duration = 2 })
+	elseif not on then
+		if AntiAFKConn then
+			AntiAFKConn:Disconnect()
+			AntiAFKConn = nil
+		end
+		VindUI:Notify({ Title = "Anti AFK", Text = "Disabled", Type = "info", Duration = 2 })
+	end
+end
+
+Tabs.Settings:AddToggle({
+	Text        = "Anti AFK",
+	Description = "Answers Roblox's idle check (Idled -> VirtualUser) the instant it fires, so the server never idle-kicks you.",
+	Icon        = "Lucide:activity",
+	Flag        = "antiAfk",
+	Default     = true,
+	Callback    = SetAntiAFK,
+})
+
+Tabs.Settings:AddToggle({
+	Text        = "Insta proximity prompt",
+	Description = "Auto Collect Chest: instantly triggers the crate's ProximityPrompt right after teleport, instead of waiting for the game to draw the prompt/interact option first.",
+	Icon        = "Lucide:mouse-pointer-click",
+	Flag        = "instaProxPrompt",
+	Default     = getgenv().InstaProxPrompt,
+	Callback    = function(value)
+		getgenv().InstaProxPrompt = value
 	end,
 })
 
